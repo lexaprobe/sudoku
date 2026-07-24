@@ -1,1 +1,5 @@
-save_states.txt
+*
+!grid_seeds.txt
+!main.py
+!sudoku.py
+!README.md
