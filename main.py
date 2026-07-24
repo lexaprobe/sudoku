@@ -4,6 +4,13 @@ import pygame
 
 from sudoku import Sudoku
 
+LIGHT_GREY = pygame.Color(223, 223, 223)
+YELLOW = pygame.Color(249, 219, 74)
+BLUE = pygame.Color(195, 225, 255)
+RED = pygame.Color(236, 90, 92)
+WHITE = pygame.Color(255, 255, 255)
+BLACK = pygame.Color(0, 0, 0)
+
 
 def get_seed(seed: int) -> str:
     with open("grid_seeds.txt") as f:
@@ -86,29 +93,39 @@ def draw_grid(
     font_a: pygame.font.Font,
     font_b: pygame.font.Font,
 ):
-    window.fill(pygame.Color("WHITE"))
-
-    # light grey - 223, 223, 223
-    # yellow - 249, 219, 74
-    # blue - 177, 215, 251
-    # light blue - 223, 238, 253
+    window.fill(WHITE)
 
     # cell tints and digits
     cell_number = 0
+    current_cell = sudoku.current_cell()
     for y in range(0, 900, 100):
         for x in range(0, 900, 100):
             cell = sudoku.get_grid()[cell_number]
+            cell_colour = None
             if cell.is_fixed():
+                cell_colour = LIGHT_GREY
+            if current_cell != None:
+                if cell == current_cell or (
+                    cell.digit() == current_cell.digit() and cell.digit() != "0"
+                ):
+                    cell_colour = YELLOW
+                if cell.index() in current_cell.sightline():
+                    cell_colour = BLUE
+            if cell_colour != None:
                 pygame.draw.rect(
-                    window, pygame.Color(223, 223, 223), pygame.Rect(x, y, 100, 100)
-                )
-            if sudoku.is_current_cell(cell):
-                pygame.draw.rect(
-                    window, pygame.Color(177, 215, 251), pygame.Rect(x, y, 100, 100)
+                    window,
+                    cell_colour,
+                    pygame.Rect(x, y, 100, 100),
                 )
             if cell.digit() != "0":
+                digit_colour = BLACK
+                for i in cell.sightline():
+                    c = sudoku.get_cell(i)
+                    if c != None and c.digit() == cell.digit():
+                        digit_colour = RED
+                        break
                 window.blit(
-                    font_a.render(cell.digit(), 1, cell.digit_colour()),
+                    font_a.render(cell.digit(), 1, digit_colour),
                     (x + 30, y + 10),
                 )
             else:
@@ -118,7 +135,7 @@ def draw_grid(
                 for p in range(1, 10):
                     if str(p) in cell.candidates_corner():
                         window.blit(
-                            font_b.render(str(p), 1, cell.digit_colour()),
+                            font_b.render(str(p), 1, BLACK),
                             (x + 30 - 17 + buffer_x, y + 10 - 1 + buffer_y),
                         )
                     buffer_x += 30
@@ -129,17 +146,17 @@ def draw_grid(
             cell_number += 1
 
     # 3x3 boxes
-    pygame.draw.line(window, pygame.Color("BLACK"), (300, 0), (300, 900), 4)
-    pygame.draw.line(window, pygame.Color("BLACK"), (600, 0), (600, 900), 4)
-    pygame.draw.line(window, pygame.Color("BLACK"), (0, 300), (900, 300), 4)
-    pygame.draw.line(window, pygame.Color("BLACK"), (0, 600), (900, 600), 4)
+    pygame.draw.line(window, BLACK, (300, 0), (300, 900), 4)
+    pygame.draw.line(window, BLACK, (600, 0), (600, 900), 4)
+    pygame.draw.line(window, BLACK, (0, 300), (900, 300), 4)
+    pygame.draw.line(window, BLACK, (0, 600), (900, 600), 4)
 
     # soft verticals
     for x in range(0, 900, 100):
-        pygame.draw.line(window, pygame.Color("BLACK"), (x, 0), (x, 900))
+        pygame.draw.line(window, BLACK, (x, 0), (x, 900))
     # soft horizontals
     for y in range(0, 900, 100):
-        pygame.draw.line(window, pygame.Color("BLACK"), (0, y), (900, y))
+        pygame.draw.line(window, BLACK, (0, y), (900, y))
 
 
 def get_number(key):
