@@ -6,7 +6,7 @@ A sudoku program built with Python and pygame. Includes 50 pre-determined config
 
 ### Running the Sudoku
 
-Install dependencies: `pip install pygame`
+Install dependencies: `pip install -r dependencies.txt`
 
 Run: `python main.py <seed>`
 
