@@ -1,5 +1,3 @@
-from pygame import Color
-
 BOX_1 = [0, 1, 2, 9, 10, 11, 18, 19, 20]
 BOX_2 = [3, 4, 5, 12, 13, 14, 21, 22, 23]
 BOX_3 = [6, 7, 8, 15, 16, 17, 24, 25, 26]
@@ -107,13 +105,13 @@ class Sudoku:
                 cell.fix_digit()
         return True
 
-    def set_current_cell(self, index: int | None) -> bool:
+    def set_current_cell(self, index: int | None):
         if index is None or not index in range(81):
-            return False
+            self._current_cell = None
+            return
         cell = self.cells[index]
-        if cell is None:
-            return False
-        self._current_cell = cell
+        if cell != None:
+            self._current_cell = cell
         return True
 
     def get_grid(self) -> list[Cell]:
@@ -129,3 +127,12 @@ class Sudoku:
 
     def is_current_cell(self, cell: Cell) -> bool:
         return self._current_cell == cell
+
+    def is_solved(self) -> bool:
+        for cell in self.cells:
+            if cell.digit() == "0":
+                return False
+            for i in cell.sightline():
+                if self.cells[i].digit() == cell.digit():
+                    return False
+        return True
