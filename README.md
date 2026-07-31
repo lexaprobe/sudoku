@@ -23,3 +23,5 @@ To add a candidate to a square, press ENTER to go into candidate mode.
 Candidates can then be added and removed using the keyboard.
 
 To remove a number from a square, press DELETE.
+
+Pause the game by pressing ESCAPE.

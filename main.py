@@ -21,32 +21,11 @@ GRID_HEIGHT = 900
 GRID_OFFSET = 81
 
 
-def get_seed(seed: int) -> str:
-    with open("grid_seeds.txt") as f:
-        grid_seeds = f.read().split("\n\n")
-        try:
-            seed = int(seed)
-            if seed < 0 or seed > 49:
-                raise TypeError
-        except TypeError:
-            seed = 0
-        return grid_seeds[seed].replace("\n", "")
-
-
 def main():
     global FONT_XS, FONT_S, FONT_M, FONT_L
-    if len(sys.argv) < 2:
-        seed_number = 0
-    else:
-        seed_number = int(sys.argv[1])
-    seed = get_seed(seed_number)
-
-    sudoku = Sudoku()
-    sudoku.set_grid(seed)
 
     pygame.init()
     pygame.font.init()
-    clock = pygame.time.Clock()
     FONT_XS = pygame.font.SysFont("Arial", 20)
     FONT_S = pygame.font.SysFont("Arial", 35)
     FONT_M = pygame.font.SysFont("Arial", 50)
@@ -56,7 +35,26 @@ def main():
     header = pygame.surface.Surface((GRID_WIDTH, GRID_OFFSET))
     pygame.display.set_caption("Sudoku")
 
+    sudoku = Sudoku()
+    if len(sys.argv) < 2:
+        seed_number = 0
+    else:
+        seed_number = int(sys.argv[1])
+    run(window, grid, header, sudoku, seed_number)
+
+
+def run(
+    window: pygame.Surface,
+    grid: pygame.Surface,
+    header: pygame.Surface,
+    sudoku: Sudoku,
+    seed_number: int,
+):
+    sudoku.set_grid(get_seed(seed_number))
+    clock = pygame.time.Clock()
     candidate_mode = False
+    paused = False
+    digit = None
     coords = None
     frames = 0
     solved = False
@@ -64,6 +62,7 @@ def main():
 
     while True:
         cell = sudoku.current_cell()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -71,59 +70,52 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 coords = pygame.mouse.get_pos()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
+                if event.key == pygame.K_ESCAPE:
+                    paused = not paused
+                elif event.key == pygame.K_RETURN:
                     candidate_mode = not candidate_mode
-                if cell is None or cell.is_fixed():
-                    continue
-                digit = get_number(event.key)
-                if digit is None or solved:
-                    continue
-                if not candidate_mode:
-                    cell.insert_digit(digit)
-                else:
-                    if digit == "0":
-                        cell.clear_candidates_corner()
-                    else:
-                        cell.insert_candidate_corner(digit)
-        sudoku.set_current_cell(get_cell(coords))
+                elif not paused:
+                    digit = get_number(event.key)
+                    handle_input(digit, cell, candidate_mode)
+
         if not solved:
             solved = sudoku.is_solved()
             if solved:
                 solve_time = get_time(frames, 60)
 
-        window.blit(draw_grid(grid, sudoku), (0, GRID_OFFSET))
-        time = solve_time if solved else get_time(frames, 60)
-        window.blit(draw_header(header, time, solved), (0, 0))
+        if not paused:
+            sudoku.set_current_cell(get_cell(coords))
+            time = solve_time if solved else get_time(frames, 60)
+            clock.tick(60)
+            frames += 1
+            grid = draw_grid(grid, sudoku)
+        else:
+            grid.fill(WHITE)
+            if FONT_L != None:
+                display = FONT_L.render("PAUSED", 1, BLACK)
+            grid.blit(display, display.get_rect(center=grid.get_rect().center))
+            pygame.draw.line(grid, BLACK, (0, 0), (900, 0), 4)
+
+        window.blit(grid, (0, GRID_OFFSET))
+        window.blit(draw_header(header, time, candidate_mode, solved), (0, 0))
         pygame.display.flip()
 
-        clock.tick(60)
-        frames += 1
 
-
-def get_cell(coords: tuple | None) -> int | None:
-    if coords is None or coords[1] <= GRID_OFFSET:
-        return None
-    cell_index = 0
-    for y in range(GRID_OFFSET, 900 + GRID_OFFSET, 100):
-        for x in range(0, 900, 100):
-            x_diff = coords[0] - x
-            y_diff = coords[1] - y
-            if x_diff <= 100 and y_diff <= 100:
-                return cell_index
-            cell_index += 1
-    return None
-
-
-def get_time(frames: int, fps: int) -> tuple[int, int, int]:
-    seconds = int(frames / fps)
-    minutes = int((seconds - seconds % 60) / 60)
-    hours = int((minutes - minutes % 60) / 60)
-    return (seconds % 60, minutes % 60, hours % 24)
+def handle_input(digit: str | None, cell: Cell | None, candidate_mode: bool):
+    if digit is None or cell is None or cell.is_fixed():
+        return
+    if digit == "0" and (candidate_mode or cell.digit() == "0"):
+        cell.clear_candidates_corner()
+    elif candidate_mode:
+        cell.insert_candidate_corner(digit)
+    else:
+        cell.insert_digit(digit)
 
 
 def draw_header(
     surface: pygame.Surface,
     time: tuple[int, int, int],
+    candidate_mode: bool,
     solved: bool,
 ) -> pygame.Surface:
     surface.fill(GREY)
@@ -133,15 +125,19 @@ def draw_header(
     if time[2] != 0:
         clock = f"{time[2]}:" + clock
     if not solved:
-        display = FONT_M.render(clock, 1, BLACK)
-        surface.blit(display, display.get_rect(center=surface.get_rect().center))
+        msg_1 = clock
+        msg_2 = "Candidate Mode" if candidate_mode else "Normal Mode"
     else:
-        display_1 = FONT_S.render("Congratulations!", 1, BLACK)
-        rect_1 = pygame.Rect(0, 0, GRID_WIDTH, 2 * GRID_OFFSET / 3)
-        surface.blit(display_1, display_1.get_rect(center=rect_1.center))
-        display_2 = FONT_XS.render("Sudoku solved in " + clock, 1, BLACK)
-        rect_2 = pygame.Rect(0, (2 * GRID_OFFSET / 3) - 5, GRID_WIDTH, GRID_OFFSET / 3)
-        surface.blit(display_2, display_2.get_rect(center=rect_2.center))
+        msg_1 = "Congratulations!"
+        msg_2 = "Sudoku solved in " + clock
+
+    display_1 = FONT_S.render(msg_1, 1, BLACK)
+    rect_1 = pygame.Rect(0, 0, GRID_WIDTH, 2 * GRID_OFFSET / 3)
+    surface.blit(display_1, display_1.get_rect(center=rect_1.center))
+    display_2 = FONT_XS.render(msg_2, 1, BLACK)
+    rect_2 = pygame.Rect(0, (2 * GRID_OFFSET / 3) - 5, GRID_WIDTH, GRID_OFFSET / 3)
+    surface.blit(display_2, display_2.get_rect(center=rect_2.center))
+
     return surface
 
 
@@ -207,6 +203,39 @@ def draw_grid(
         pygame.draw.line(surface, BLACK, (0, y), (900, y))
 
     return surface
+
+
+def get_seed(seed: int) -> str:
+    with open("grid_seeds.txt") as f:
+        grid_seeds = f.read().split("\n\n")
+        try:
+            seed = int(seed)
+            if seed < 0 or seed > 49:
+                raise TypeError
+        except TypeError:
+            seed = 0
+        return grid_seeds[seed].replace("\n", "")
+
+
+def get_cell(coords: tuple | None) -> int | None:
+    if coords is None or coords[1] <= GRID_OFFSET:
+        return None
+    cell_index = 0
+    for y in range(GRID_OFFSET, 900 + GRID_OFFSET, 100):
+        for x in range(0, 900, 100):
+            x_diff = coords[0] - x
+            y_diff = coords[1] - y
+            if x_diff <= 100 and y_diff <= 100:
+                return cell_index
+            cell_index += 1
+    return None
+
+
+def get_time(frames: int, fps: int) -> tuple[int, int, int]:
+    seconds = int(frames / fps)
+    minutes = int((seconds - seconds % 60) / 60)
+    hours = int((minutes - minutes % 60) / 60)
+    return (seconds % 60, minutes % 60, hours % 24)
 
 
 def get_cell_colour(cell: Cell | None, current_cell: Cell | None) -> pygame.Color:
