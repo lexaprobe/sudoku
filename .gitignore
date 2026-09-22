@@ -1,6 +1,7 @@
 *
 !grid_seeds.txt
 !main.py
+!external.py
 !sudoku.py
 !dependencies.txt
 !README.md

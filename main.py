@@ -2,11 +2,13 @@ import sys
 
 import pygame
 
+import external
 from sudoku import Cell, Sudoku
 
 GREY = pygame.Color(223, 223, 223)
 YELLOW = pygame.Color(249, 219, 74)
 BLUE = pygame.Color(195, 225, 255)
+DARK_BLUE = pygame.Color(55, 95, 209)
 RED = pygame.Color(236, 90, 92)
 WHITE = pygame.Color(255, 255, 255)
 BLACK = pygame.Color(0, 0, 0)
@@ -24,6 +26,15 @@ GRID_OFFSET = 81
 def main():
     global FONT_XS, FONT_S, FONT_M, FONT_L
 
+    sudoku = Sudoku()
+    grid, msg = get_grid(sys.argv)
+    if msg is not None:
+        print(msg, file=sys.stderr)
+        exit(1)
+    if not sudoku.set_grid(grid):
+        print("Error: Invalid grid format", file=sys.stderr)
+        exit(2)
+
     pygame.init()
     pygame.font.init()
     FONT_XS = pygame.font.SysFont("Arial", 20)
@@ -35,12 +46,35 @@ def main():
     header = pygame.surface.Surface((GRID_WIDTH, GRID_OFFSET))
     pygame.display.set_caption("Sudoku")
 
-    sudoku = Sudoku()
-    if len(sys.argv) < 2:
-        seed_number = 0
+    run(window, grid, header, sudoku)
+
+
+def get_grid(args: list[str]) -> tuple[str, str | None]:
+    grid = ""
+    msg = None
+    if len(args) < 2:
+        msg = f"\nError: No parameters given\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+        return (grid, msg)
+
+    p = args[1]
+    if p.isdigit():
+        with open("grid_seeds.txt") as f:
+            grid_seeds = f.read().split("\n\n")
+            seed = int(p) - 1
+            if seed < 0 or seed > 49:
+                msg = (
+                    f"\nError: Invalid seed: '{p}'\nExpected a number between 1 and 50"
+                )
+            else:
+                grid = grid_seeds[seed].replace("\n", "")
+    elif p.isalpha():
+        mode = p.lower()
+        grid = external.daily_puzzle(mode)
+        if grid == "":
+            msg = f"\nError: Invalid mode: '{p}'\nExpected one of: 'easy', 'medium', or 'hard'"
     else:
-        seed_number = int(sys.argv[1])
-    run(window, grid, header, sudoku, seed_number)
+        msg = f"\nError: Invalid parameter: '{p}'\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+    return (grid, msg)
 
 
 def run(
@@ -48,9 +82,7 @@ def run(
     grid: pygame.Surface,
     header: pygame.Surface,
     sudoku: Sudoku,
-    seed_number: int,
 ):
-    sudoku.set_grid(get_seed(seed_number))
     clock = pygame.time.Clock()
     candidate_mode = False
     paused = False
@@ -62,6 +94,7 @@ def run(
 
     while True:
         cell = sudoku.current_cell()
+        candidate_mode = True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -70,10 +103,8 @@ def run(
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 coords = pygame.mouse.get_pos()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                if event.key in [pygame.K_ESCAPE, pygame.K_p]:
                     paused = not paused
-                elif event.key == pygame.K_RETURN:
-                    candidate_mode = not candidate_mode
                 elif not paused:
                     digit = get_number(event.key)
                     handle_input(digit, cell, candidate_mode)
@@ -205,18 +236,6 @@ def draw_grid(
     return surface
 
 
-def get_seed(seed: int) -> str:
-    with open("grid_seeds.txt") as f:
-        grid_seeds = f.read().split("\n\n")
-        try:
-            seed = int(seed)
-            if seed < 0 or seed > 49:
-                raise TypeError
-        except TypeError:
-            seed = 0
-        return grid_seeds[seed].replace("\n", "")
-
-
 def get_cell(coords: tuple | None) -> int | None:
     if coords is None or coords[1] <= GRID_OFFSET:
         return None
@@ -229,13 +248,6 @@ def get_cell(coords: tuple | None) -> int | None:
                 return cell_index
             cell_index += 1
     return None
-
-
-def get_time(frames: int, fps: int) -> tuple[int, int, int]:
-    seconds = int(frames / fps)
-    minutes = int((seconds - seconds % 60) / 60)
-    hours = int((minutes - minutes % 60) / 60)
-    return (seconds % 60, minutes % 60, hours % 24)
 
 
 def get_cell_colour(cell: Cell | None, current_cell: Cell | None) -> pygame.Color:
@@ -255,13 +267,20 @@ def get_cell_colour(cell: Cell | None, current_cell: Cell | None) -> pygame.Colo
 
 
 def get_digit_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
-    digit_colour = BLACK
+    digit_colour = DARK_BLUE if not cell.is_fixed() else BLACK
     for i in cell.sightline():
         c = sudoku.get_cell(i)
         if c != None and c.digit() == cell.digit():
             digit_colour = RED
             break
     return digit_colour
+
+
+def get_time(frames: int, fps: int) -> tuple[int, int, int]:
+    seconds = int(frames / fps)
+    minutes = int((seconds - seconds % 60) / 60)
+    hours = int((minutes - minutes % 60) / 60)
+    return (seconds % 60, minutes % 60, hours % 24)
 
 
 def get_number(key):
