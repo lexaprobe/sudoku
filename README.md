@@ -10,7 +10,7 @@ Install dependencies: `pip install -r dependencies.txt`
 
 Run: `python main.py <seed>`
 
-The seed argument determines which sudoku configuration will be used. Omitting this argument will use the default seed.
+The seed argument determines which sudoku configuration will be used. Seeds can be a number from 1 through 50 *or* easy/medium/hard to play the corresponding daily NYT sudoku.
 
 ### How to Play
 
@@ -18,7 +18,7 @@ Click on a square to highlight it.
 
 Once highlighted, a number can be entered using the keyboard.
 
-To add a candidate to a square, press ENTER to go into candidate mode.
+To add a candidate to a square, hold SHIFT to enter candidate mode.
 
 Candidates can then be added and removed using the keyboard.
 
