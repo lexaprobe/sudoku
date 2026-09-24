@@ -22,79 +22,69 @@ GRID_WIDTH = 900
 GRID_HEIGHT = 900
 GRID_OFFSET = 81
 
-
-def main():
-    global FONT_XS, FONT_S, FONT_M, FONT_L
-
-    sudoku = Sudoku()
-    grid, msg = get_grid(sys.argv)
-    if msg is not None:
-        print(msg, file=sys.stderr)
-        exit(1)
-    if not sudoku.set_grid(grid):
-        print("Error: Invalid grid format", file=sys.stderr)
-        exit(2)
-
-    pygame.init()
-    pygame.font.init()
-    FONT_XS = pygame.font.SysFont("Arial", 20)
-    FONT_S = pygame.font.SysFont("Arial", 35)
-    FONT_M = pygame.font.SysFont("Arial", 50)
-    FONT_L = pygame.font.SysFont("Arial", 70)
-    window = pygame.display.set_mode((GRID_WIDTH, GRID_HEIGHT + GRID_OFFSET))
-    grid = pygame.surface.Surface((GRID_WIDTH, GRID_HEIGHT))
-    header = pygame.surface.Surface((GRID_WIDTH, GRID_OFFSET))
-    pygame.display.set_caption("Sudoku")
-
-    run(window, grid, header, sudoku)
+FPS = 60
 
 
-def get_grid(args: list[str]) -> tuple[str, str | None]:
-    grid = ""
-    msg = None
-    if len(args) < 2:
-        msg = f"\nError: No parameters given\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
-        return (grid, msg)
+class AppState:
+    candidate_mode: bool
+    paused: bool
+    solved: bool
+    time: tuple[int, int, int]
+    solve_time: tuple[int, int, int]
 
-    p = args[1]
-    if p.isdigit():
-        with open("grid_seeds.txt") as f:
-            grid_seeds = f.read().split("\n\n")
-            seed = int(p) - 1
-            if seed < 0 or seed > 49:
-                msg = (
-                    f"\nError: Invalid seed: '{p}'\nExpected a number between 1 and 50"
-                )
-            else:
-                grid = grid_seeds[seed].replace("\n", "")
-    elif p.isalpha():
-        mode = p.lower()
-        grid = external.daily_puzzle(mode)
-        if grid == "":
-            msg = f"\nError: Invalid mode: '{p}'\nExpected one of: 'easy', 'medium', or 'hard'"
-    else:
-        msg = f"\nError: Invalid parameter: '{p}'\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
-    return (grid, msg)
+    def __init__(self):
+        self.candidate_mode = False
+        self.paused = False
+        self.solved = False
+        self.time = (0, 0, 0)
+        self.solve_time = self.time
+
+
+class Button:
+    rect: pygame.Rect
+    pressed: bool = False
+
+    def __init__(self, x, y, w, h):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.rect = pygame.Rect(x, y, w, h)
+
+    def is_pressed(self) -> bool:
+        action = False
+        if (
+            pygame.mouse.get_pressed()[0] == 1
+            and self.rect.collidepoint(pygame.mouse.get_pos())
+            and self.pressed == False
+        ):
+            self.pressed = True
+            action = True
+
+        if pygame.mouse.get_pressed()[0] == 0:
+            self.pressed = False
+
+        return action
 
 
 def run(
+    state: AppState,
+    sudoku: Sudoku,
     window: pygame.Surface,
     grid: pygame.Surface,
     header: pygame.Surface,
-    sudoku: Sudoku,
 ):
-    clock = pygame.time.Clock()
-    candidate_mode = False
-    paused = False
-    digit = None
-    coords = None
     frames = 0
-    solved = False
-    solve_time = (0, 0, 0)
+    coords = None
+    clock = pygame.time.Clock()
+    buttons: list[Button] = []
+    pause = pygame.surface.Surface((grid.get_rect().w, grid.get_rect().h))
 
     while True:
         cell = sudoku.current_cell()
-        candidate_mode = True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
+        state.candidate_mode = (
+            True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
+        )
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -104,60 +94,58 @@ def run(
                 coords = pygame.mouse.get_pos()
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_ESCAPE, pygame.K_p]:
-                    paused = not paused
-                elif not paused:
-                    digit = get_number(event.key)
-                    handle_input(digit, cell, candidate_mode)
+                    state.paused = not state.paused
+                elif not state.paused:
+                    handle_input(state, get_number(event.key), cell)
 
-        if not solved:
-            solved = sudoku.is_solved()
-            if solved:
-                solve_time = get_time(frames, 60)
+        if not state.solved:
+            state.solved = sudoku.is_solved()
+            if state.solved:
+                state.solve_time = get_time(frames, FPS)
 
-        if not paused:
+        if not state.paused:
             sudoku.set_current_cell(get_cell(coords))
-            time = solve_time if solved else get_time(frames, 60)
-            clock.tick(60)
+            state.time = state.solve_time if state.solved else get_time(frames, FPS)
+            clock.tick(FPS)
             frames += 1
             grid = draw_grid(grid, sudoku)
-        else:
-            grid.fill(WHITE)
-            if FONT_L != None:
-                display = FONT_L.render("PAUSED", 1, BLACK)
-            grid.blit(display, display.get_rect(center=grid.get_rect().center))
-            pygame.draw.line(grid, BLACK, (0, 0), (900, 0), 4)
 
         window.blit(grid, (0, GRID_OFFSET))
-        window.blit(draw_header(header, time, candidate_mode, solved), (0, 0))
+        if state.paused:
+            pause.fill(WHITE)
+            if FONT_L != None:
+                display = FONT_L.render("PAUSED", 1, BLACK)
+            pause.blit(display, display.get_rect(center=pause.get_rect().center))
+            pygame.draw.line(pause, BLACK, (0, 0), (900, 0), 4)
+            window.blit(pause, (0, GRID_OFFSET))
+        window.blit(draw_header(state, header, buttons, sudoku.title), (0, 0))
         pygame.display.flip()
 
 
-def handle_input(digit: str | None, cell: Cell | None, candidate_mode: bool):
+def handle_input(state: AppState, digit: str | None, cell: Cell | None):
     if digit is None or cell is None or cell.is_fixed():
         return
-    if digit == "0" and (candidate_mode or cell.digit() == "0"):
-        cell.clear_candidates_corner()
-    elif candidate_mode:
-        cell.insert_candidate_corner(digit)
+    if digit == "0" and (state.candidate_mode or cell.digit() == "0"):
+        cell.clear_candidates()
+    elif state.candidate_mode:
+        cell.insert_candidate(digit)
     else:
         cell.insert_digit(digit)
 
 
 def draw_header(
-    surface: pygame.Surface,
-    time: tuple[int, int, int],
-    candidate_mode: bool,
-    solved: bool,
+    state: AppState, surface: pygame.Surface, buttons: list[Button], title: str
 ) -> pygame.Surface:
+    time = state.time
     surface.fill(GREY)
     if FONT_M is None or FONT_S is None or FONT_XS is None:
         return surface
     clock = f"{str(time[1]).rjust(2, "0")}:{str(time[0]).rjust(2, "0")}"
     if time[2] != 0:
         clock = f"{time[2]}:" + clock
-    if not solved:
+    if not state.solved:
         msg_1 = clock
-        msg_2 = "Candidate Mode" if candidate_mode else "Normal Mode"
+        msg_2 = title
     else:
         msg_1 = "Congratulations!"
         msg_2 = "Sudoku solved in " + clock
@@ -168,6 +156,8 @@ def draw_header(
     display_2 = FONT_XS.render(msg_2, 1, BLACK)
     rect_2 = pygame.Rect(0, (2 * GRID_OFFSET / 3) - 5, GRID_WIDTH, GRID_OFFSET / 3)
     surface.blit(display_2, display_2.get_rect(center=rect_2.center))
+    for b in buttons:
+        pygame.draw.rect(surface, WHITE, b.rect)
 
     return surface
 
@@ -182,8 +172,9 @@ def draw_grid(
     current_cell = sudoku.current_cell()
     for y in range(0, 900, 100):
         for x in range(0, 900, 100):
-            cell = sudoku.get_grid()[cell_number]
-
+            cell = sudoku.get_cell(cell_number)
+            if cell is None:
+                continue
             # colour cell
             cell_colour = get_cell_colour(cell, current_cell)
             cell_rect = pygame.draw.rect(
@@ -207,7 +198,7 @@ def draw_grid(
                 buffer_y = 0
                 count = 0
                 for p in range(1, 10):
-                    if str(p) in cell.candidates_corner():
+                    if str(p) in cell.candidates():
                         surface.blit(
                             FONT_XS.render(str(p), 1, BLACK),
                             (x + 30 - 17 + buffer_x, y + 10 - 1 + buffer_y),
@@ -276,6 +267,38 @@ def get_digit_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
     return digit_colour
 
 
+def get_puzzle(args: list[str]) -> tuple[str, str]:
+    puzzle = ""
+    msg = ""
+    if len(args) < 2:
+        msg = f"\nError: No parameters given\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+        return (puzzle, msg)
+
+    p = args[1]
+    if p.isdigit():
+        with open("puzzles.txt") as f:
+            puzzles = f.read().split("\n\n")
+            seed = int(p) - 1
+            if seed < 0 or seed > 49:
+                msg = (
+                    f"\nError: Invalid seed: '{p}'\nExpected a number between 1 and 50"
+                )
+            else:
+                puzzle = puzzles[seed].replace("\n", "")
+                msg = f"Puzzle {p}"
+    elif p.isalpha():
+        mode = p.lower()
+        data = external.fetch_puzzle_data()
+        puzzle = external.daily_puzzle(mode)
+        if data is not None:
+            msg = f"NYT {mode.capitalize()} Puzzle — {data["displayDate"]}"
+        if puzzle == "":
+            msg = f"\nError: Invalid mode: '{p}'\nExpected one of: 'easy', 'medium', or 'hard'"
+    else:
+        msg = f"\nError: Invalid parameter: '{p}'\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+    return (puzzle, msg)
+
+
 def get_time(frames: int, fps: int) -> tuple[int, int, int]:
     seconds = int(frames / fps)
     minutes = int((seconds - seconds % 60) / 60)
@@ -306,6 +329,33 @@ def get_number(key):
         return "0"
     else:
         return None
+
+
+def main():
+    global FONT_XS, FONT_S, FONT_M, FONT_L
+
+    sudoku = Sudoku()
+    puzzle, msg = get_puzzle(sys.argv)
+    if puzzle == "":
+        print(msg, file=sys.stderr)
+        exit(1)
+    if not sudoku.set_puzzle(puzzle):
+        print("\nError: Invalid grid format", file=sys.stderr)
+        exit(2)
+    sudoku.title = msg
+
+    pygame.init()
+    pygame.font.init()
+    FONT_XS = pygame.font.SysFont("Arial", 20)
+    FONT_S = pygame.font.SysFont("Arial", 35)
+    FONT_M = pygame.font.SysFont("Arial", 50)
+    FONT_L = pygame.font.SysFont("Arial", 70)
+    window = pygame.display.set_mode((GRID_WIDTH, GRID_HEIGHT + GRID_OFFSET))
+    grid = pygame.surface.Surface((GRID_WIDTH, GRID_HEIGHT))
+    header = pygame.surface.Surface((GRID_WIDTH, GRID_OFFSET))
+    pygame.display.set_caption("Sudoku")
+
+    run(AppState(), sudoku, window, grid, header)
 
 
 if __name__ == "__main__":
