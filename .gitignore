@@ -1,7 +1,6 @@
-*
-!puzzles.txt
-!main.py
-!external.py
-!sudoku.py
-!dependencies.txt
-!README.md
+.DS_Store
+__pycache__
+.mypy_cache
+.venv
+.vscode
+*.egg-info
