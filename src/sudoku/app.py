@@ -4,14 +4,14 @@ import pygame
 
 from . import util
 from .board import Cell, Sudoku
-from .gfx import Grid, Header, Renderer
+from .gfx import Button, Grid, Header, Renderer
 from .state import PuzzleState
 
 FPS = 60
 
-GRID_WIDTH = 900
-GRID_HEIGHT = 900
-GRID_OFFSET = 81
+GRID_SIZE = 750
+BOX_SIZE = GRID_SIZE / 9
+HEAD_OFFSET = BOX_SIZE
 
 
 def init():
@@ -25,11 +25,19 @@ def init():
         exit(2)
     sudoku.title = msg
 
-    renderer = Renderer(GRID_WIDTH, GRID_HEIGHT + GRID_OFFSET)
-    renderer.add_pane(
-        Grid(pygame.surface.Surface((GRID_WIDTH, GRID_HEIGHT)), 0, GRID_OFFSET)
-    )
-    renderer.add_pane(Header(pygame.surface.Surface((GRID_WIDTH, GRID_OFFSET)), 0, 0))
+    buttons = []
+    # buttons.append(Button(10, 10, 80, 80))
+    # buttons.append(Button(110, 10, 80, 80))
+    # buttons.append(Button(210, 10, 80, 80))
+    # buttons.append(Button(610, 10, 80, 80))
+    # buttons.append(Button(710, 10, 80, 80))
+    # buttons.append(Button(810, 10, 80, 80))
+
+    header = Header(0, 0, GRID_SIZE, HEAD_OFFSET, buttons)
+
+    renderer = Renderer(GRID_SIZE, GRID_SIZE + HEAD_OFFSET)
+    renderer.add_viewpane(Grid(0, HEAD_OFFSET, GRID_SIZE, GRID_SIZE))
+    renderer.add_viewpane(header)
     renderer.set_caption("Sudoku")
 
     run(sudoku, renderer)
@@ -56,7 +64,7 @@ def run(sudoku: Sudoku, renderer: Renderer):
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_ESCAPE, pygame.K_p]:
                     state.paused = not state.paused
-                elif not state.paused:
+                elif not state.paused and not state.solved:
                     handle_input(state, util.get_digit(event.key), cell)
 
         if not state.solved:
@@ -65,7 +73,7 @@ def run(sudoku: Sudoku, renderer: Renderer):
                 state.solve_time = util.get_time(frames, FPS)
 
         if not state.paused:
-            sudoku.set_current_cell(get_cell(coords))
+            sudoku.set_current_cell(find_cell(coords))
             state.time = (
                 state.solve_time if state.solved else util.get_time(frames, FPS)
             )
@@ -86,15 +94,15 @@ def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
         cell.insert_digit(digit)
 
 
-def get_cell(coords: tuple | None) -> int | None:
-    if coords is None or coords[1] <= 81:
+def find_cell(coords: tuple[int, int] | None) -> int | None:
+    if coords is None or coords[1] <= HEAD_OFFSET:
         return None
     cell_index = 0
-    for y in range(81, 900 + 81, 100):
-        for x in range(0, 900, 100):
+    for y in util.fstep(HEAD_OFFSET, BOX_SIZE, 9):
+        for x in util.fstep(0, BOX_SIZE, 9):
             x_diff = coords[0] - x
             y_diff = coords[1] - y
-            if x_diff <= 100 and y_diff <= 100:
+            if x_diff <= BOX_SIZE and y_diff <= BOX_SIZE:
                 return cell_index
             cell_index += 1
     return None

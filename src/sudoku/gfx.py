@@ -4,6 +4,7 @@ import pygame
 
 from .board import Cell, Sudoku
 from .state import PuzzleState
+from .util import fstep
 
 GREY = pygame.Color(223, 223, 223)
 YELLOW = pygame.Color(249, 219, 74)
@@ -35,11 +36,7 @@ class Button:
     rect: pygame.Rect
     pressed: bool = False
 
-    def __init__(self, x, y, w, h):
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
+    def __init__(self, x: float, y: float, w: float, h: float):
         self.rect = pygame.Rect(x, y, w, h)
 
     def is_pressed(self) -> bool:
@@ -57,19 +54,23 @@ class Button:
 
         return action
 
+    def scale(self, factor: float):
+        r = self.rect
+        self.rect = pygame.Rect(r.x, r.y, r.w * factor, r.h * factor)
+
 
 class ViewPane(ABC):
     surface: pygame.Surface
-    x: int
-    y: int
+    x: float
+    y: float
     buttons: list[Button]
 
     def __init__(
-        self, surface: pygame.Surface, x: int, y: int, buttons: list[Button] = []
+        self, x: float, y: float, w: float, h: float, buttons: list[Button] = []
     ):
-        self.surface = surface
         self.x = x
         self.y = y
+        self.surface = pygame.Surface((w, h))
         self.buttons = buttons
 
     @abstractmethod
@@ -78,28 +79,42 @@ class ViewPane(ABC):
     ) -> pygame.Surface:
         return self.surface
 
+    def scale(self, value: float) -> int:
+        """Scales a value with this ViewPane's dimensions"""
+        return max((int)(value * self.surface.get_rect().w / 900), 1)
+
 
 class Grid(ViewPane):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        rect = self.surface.get_rect()
+        if rect.w != rect.h:
+            # grid rendering logic relies on width and height being the same
+            raise ValueError
+
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
     ) -> pygame.Surface:
+        grid = self.surface.get_rect()
+        font_l = fm.load_font(self.scale(FONT_L))
+        font_xs = fm.load_font(self.scale(FONT_XS))
+        line = self.scale(4)
+
         self.surface.fill(WHITE)
-        font_l = fm.load_font(FONT_L)
-        font_xs = fm.load_font(FONT_XS)
 
         if state.paused:
             display = font_l.render("PAUSED", 1, BLACK)
-            self.surface.blit(
-                display, display.get_rect(center=self.surface.get_rect().center)
-            )
-            pygame.draw.line(self.surface, BLACK, (0, 0), (900, 0), 4)
+            self.surface.blit(display, display.get_rect(center=grid.center))
+            pygame.draw.line(self.surface, BLACK, (0, 0), (grid.w, 0), line)
             return self.surface
 
-        cell_number = 0
+        cell_w = grid.w / 9
+        cell_h = grid.h / 9
+        index = 0
         current_cell = sudoku.current_cell()
-        for y in range(0, 900, 100):
-            for x in range(0, 900, 100):
-                cell = sudoku.get_cell(cell_number)
+        for y in fstep(0, cell_h, 9):
+            for x in fstep(0, cell_w, 9):
+                cell = sudoku.get_cell(index)
                 if cell is None:
                     continue
                 # colour cell
@@ -107,13 +122,9 @@ class Grid(ViewPane):
                 cell_rect = pygame.draw.rect(
                     self.surface,
                     cell_colour,
-                    pygame.Rect(x, y, 100, 100),
+                    pygame.Rect(x, y, cell_w, cell_h),
                 )
-
                 # draw cell digit(s)
-                if FONT_XS is None or FONT_L is None:
-                    cell_number += 1
-                    continue
                 if cell.digit() != "0":
                     digit_colour = Renderer.get_digit_colour(cell, sudoku)
                     cell_display = font_l.render(cell.digit(), 1, digit_colour)
@@ -121,35 +132,32 @@ class Grid(ViewPane):
                         cell_display, cell_display.get_rect(center=cell_rect.center)
                     )
                 else:
-                    buffer_x = 0
-                    buffer_y = 0
-                    count = 0
-                    for p in range(1, 10):
-                        if str(p) in cell.candidates():
-                            self.surface.blit(
-                                font_xs.render(str(p), 1, BLACK),
-                                (x + 30 - 17 + buffer_x, y + 10 - 1 + buffer_y),
-                            )
-                        buffer_x += 30
-                        count += 1
-                        if count % 3 == 0:
-                            buffer_x = 0
-                            buffer_y += 30
-                cell_number += 1
+                    for c in cell.candidates():
+                        i = int(c) - 1
+                        xb = (i % 3) * (grid.w / 30) + (cell_w / 7)
+                        yb = (int)(i / 3) * (grid.h / 30) + (cell_h / 11)
+                        self.surface.blit(
+                            font_xs.render(c, 1, BLACK),
+                            (x + xb, y + yb),
+                        )
+                index += 1
 
-        # 3x3 boxes
-        pygame.draw.line(self.surface, BLACK, (300, 0), (300, 900), 4)
-        pygame.draw.line(self.surface, BLACK, (600, 0), (600, 900), 4)
-        pygame.draw.line(self.surface, BLACK, (0, 0), (900, 0), 4)
-        pygame.draw.line(self.surface, BLACK, (0, 300), (900, 300), 4)
-        pygame.draw.line(self.surface, BLACK, (0, 600), (900, 600), 4)
+        # split grid into 9 equal-sized boxes
+        h1 = grid.w / 3
+        v1 = grid.h / 3
+        h2 = 2 * grid.w / 3
+        v2 = 2 * grid.h / 3
+        pygame.draw.line(self.surface, BLACK, (h1, 0), (h1, grid.h), line)
+        pygame.draw.line(self.surface, BLACK, (h2, 0), (h2, grid.h), line)
+        pygame.draw.line(self.surface, BLACK, (0, 0), (grid.w, 0), line)
+        pygame.draw.line(self.surface, BLACK, (0, v1), (grid.w, v1), line)
+        pygame.draw.line(self.surface, BLACK, (0, v2), (grid.w, v2), line)
 
-        # soft verticals
-        for x in range(0, 900, 100):
-            pygame.draw.line(self.surface, BLACK, (x, 0), (x, 900))
-        # soft horizontals
-        for y in range(0, 900, 100):
-            pygame.draw.line(self.surface, BLACK, (0, y), (900, y))
+        # split each box into 9 equal-sized cells
+        for x in fstep(0, cell_w, 9):
+            pygame.draw.line(self.surface, BLACK, (x, 0), (x, grid.h))
+        for y in fstep(0, cell_h, 9):
+            pygame.draw.line(self.surface, BLACK, (0, y), (grid.w, y))
 
         return self.surface
 
@@ -158,12 +166,10 @@ class Header(ViewPane):
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
     ) -> pygame.Surface:
-        self.surface.fill(GREY)
+        font_s = fm.load_font(self.scale(FONT_S))
+        font_xs = fm.load_font(self.scale(FONT_XS))
 
-        font_s = fm.load_font(FONT_S)
-        font_xs = fm.load_font(FONT_XS)
-        if font_s is None or font_xs is None:
-            return self.surface
+        self.surface.fill(GREY)
 
         time = state.time
         clock = f"{str(time[1]).rjust(2, "0")}:{str(time[0]).rjust(2, "0")}"
@@ -174,18 +180,18 @@ class Header(ViewPane):
             msg_2 = sudoku.title
         else:
             msg_1 = "Congratulations!"
-            msg_2 = "Sudoku solved in " + clock
+            msg_2 = f"Puzzle solved in {clock}"
 
-        rect = self.surface.get_rect()
+        head = self.surface.get_rect()
         display_1 = font_s.render(msg_1, 1, BLACK)
-        rect_1 = pygame.Rect(0, 0, rect.w, 2 * rect.h / 3)
+        rect_1 = pygame.Rect(0, head.h * 0.1, head.w, head.h * 0.5)
         self.surface.blit(display_1, display_1.get_rect(center=rect_1.center))
         display_2 = font_xs.render(msg_2, 1, BLACK)
-        rect_2 = pygame.Rect(0, (2 * rect.h / 3) - 5, rect.w, rect.h / 3)
+        rect_2 = pygame.Rect(0, head.h * 0.5, head.w, head.h * 0.5)
         self.surface.blit(display_2, display_2.get_rect(center=rect_2.center))
 
         for b in self.buttons:
-            pygame.draw.rect(self.surface, WHITE, b.rect)
+            pygame.draw.rect(self.surface, WHITE, b.rect, border_radius=15)
 
         return self.surface
 
@@ -193,26 +199,23 @@ class Header(ViewPane):
 class Renderer:
     _window: pygame.Surface
     _font_manager: FontManager
-    _panes: list[ViewPane] = []
+    panes: list[ViewPane] = []
 
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: float, height: float):
         pygame.init()
         self._window = pygame.display.set_mode((width, height))
         self._font_manager = FontManager()
 
     def update(self, state: PuzzleState, sudoku: Sudoku):
-        for p in self._panes:
+        for p in self.panes:
             if p is None:
                 continue
             self._window.blit(p.draw(state, sudoku, self._font_manager), (p.x, p.y))
         pygame.display.flip()
 
-    def add_pane(self, p: ViewPane):
+    def add_viewpane(self, p: ViewPane):
         if p is not None:
-            self._panes.append(p)
-
-    def clear_panes(self):
-        self._panes.clear()
+            self.panes.append(p)
 
     def set_caption(self, caption: str):
         pygame.display.set_caption(caption)

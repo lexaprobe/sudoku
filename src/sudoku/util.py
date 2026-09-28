@@ -87,3 +87,7 @@ def get_digit(key) -> str | None:
         return KEY_VALUES[key]
     except KeyError:
         return None
+
+
+def fstep(start: float, step: float, num_steps: int) -> list[float]:
+    return [start + (x * step) for x in range(0, num_steps)]
