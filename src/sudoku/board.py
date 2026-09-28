@@ -86,20 +86,21 @@ class Cell:
 
 
 class Sudoku:
-    title: str = "Sudoku Puzzle"
-    _puzzle: str
+    title: str = ""
+    _puzzle: str = ""
     _cells: list[Cell]
     _current_cell: Cell | None = None
 
     def __init__(self):
-        self.cells = [Cell(i) for i in range(81)]
+        self._cells = [Cell(i) for i in range(81)]
 
-    def set_puzzle(self, puzzle: str) -> bool:
+    def set_puzzle(self, puzzle: str, title="Sudoku Puzzle") -> bool:
         if len(puzzle) != 81:
             return False
         self._puzzle = puzzle
+        self.title = title
         for i in range(81):
-            cell = self.cells[i]
+            cell = self._cells[i]
             cell.insert_digit(puzzle[i])
             if puzzle[i] != "0":
                 cell.fix_digit()
@@ -109,7 +110,7 @@ class Sudoku:
         if index is None or not index in range(81):
             self._current_cell = None
             return
-        cell = self.cells[index]
+        cell = self._cells[index]
         if cell != None:
             self._current_cell = cell
         return True
@@ -120,7 +121,7 @@ class Sudoku:
     def get_cell(self, index: int) -> Cell | None:
         if not index in range(81):
             return None
-        return self.cells[index]
+        return self._cells[index]
 
     def insert_digit(self, digit: str, cell: Cell | None):
         if cell is None:
@@ -132,6 +133,17 @@ class Sudoku:
             return
         cell.insert_candidate(digit)
 
+    def reset(self):
+        for c in self._cells:
+            if not c.is_fixed():
+                c.insert_digit("0")
+                c.clear_candidates()
+
+    def clear(self):
+        self._cells = [Cell(i) for i in range(81)]
+        self._puzzle = ""
+        self.title = ""
+
     def current_cell(self) -> Cell | None:
         return self._current_cell
 
@@ -139,11 +151,11 @@ class Sudoku:
         return self._current_cell == cell
 
     def is_solved(self) -> bool:
-        for cell in self.cells:
+        for cell in self._cells:
             if cell.digit() == "0":
                 return False
             for i in cell.sightline():
-                if self.cells[i].digit() == cell.digit():
+                if self._cells[i].digit() == cell.digit():
                     return False
         return True
 

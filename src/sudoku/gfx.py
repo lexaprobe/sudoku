@@ -34,10 +34,21 @@ class FontManager:
 
 class Button:
     rect: pygame.Rect
+    image: pygame.Surface | None = None
     pressed: bool = False
+    tag: str
 
-    def __init__(self, x: float, y: float, w: float, h: float):
+    def __init__(self, x: float, y: float, w: float, h: float, tag: str = "button"):
         self.rect = pygame.Rect(x, y, w, h)
+        self.tag = tag
+
+    def add_image(self, image: pygame.Surface):
+        if image is None:
+            return
+        self.image = pygame.transform.smoothscale(image, (self.rect.w, self.rect.h))
+        x, y = self.rect.x, self.rect.y
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
 
     def is_pressed(self) -> bool:
         action = False
@@ -64,20 +75,34 @@ class ViewPane(ABC):
     x: float
     y: float
     buttons: list[Button]
+    tag: str
 
     def __init__(
-        self, x: float, y: float, w: float, h: float, buttons: list[Button] = []
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        buttons: list[Button] = [],
+        tag: str = "pane",
     ):
         self.x = x
         self.y = y
         self.surface = pygame.Surface((w, h))
         self.buttons = buttons
+        self.tag = tag
 
     @abstractmethod
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
     ) -> pygame.Surface:
         return self.surface
+
+    def get_button(self, button_tag: str) -> Button | None:
+        for b in self.buttons:
+            if b.tag == button_tag:
+                return b
+        return None
 
     def scale(self, value: float) -> int:
         """Scales a value with this ViewPane's dimensions"""
@@ -91,6 +116,8 @@ class Grid(ViewPane):
         if rect.w != rect.h:
             # grid rendering logic relies on width and height being the same
             raise ValueError
+        if self.tag == "pane":
+            self.tag = "grid"
 
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
@@ -163,6 +190,11 @@ class Grid(ViewPane):
 
 
 class Header(ViewPane):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tag == "pane":
+            self.tag = "header"
+
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
     ) -> pygame.Surface:
@@ -191,7 +223,17 @@ class Header(ViewPane):
         self.surface.blit(display_2, display_2.get_rect(center=rect_2.center))
 
         for b in self.buttons:
-            pygame.draw.rect(self.surface, WHITE, b.rect, border_radius=15)
+            if b.image is not None:
+                self.surface.blit(b.image, (b.rect.x, b.rect.y))
+            else:
+                pygame.draw.rect(self.surface, WHITE, b.rect, border_radius=15)
+            text = font_xs.render(b.tag, 1, BLACK)
+            self.surface.blit(
+                text,
+                text.get_rect(
+                    center=(b.rect.x + b.rect.w / 2, b.rect.h + b.rect.h / 3)
+                ),
+            )
 
         return self.surface
 
@@ -216,6 +258,12 @@ class Renderer:
     def add_viewpane(self, p: ViewPane):
         if p is not None:
             self.panes.append(p)
+
+    def viewpanes(self) -> dict[str, ViewPane]:
+        viewpanes = {}
+        for p in self.panes:
+            viewpanes[p.tag] = p
+        return viewpanes
 
     def set_caption(self, caption: str):
         pygame.display.set_caption(caption)

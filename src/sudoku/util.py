@@ -5,6 +5,7 @@ import pygame
 import requests
 from bs4 import BeautifulSoup
 
+IMAGES = "src/sudoku/resources/images"
 PUZZLES = "src/sudoku/resources/puzzles.txt"
 
 NYT_SUDOKU_URL = "https://www.nytimes.com/puzzles/sudoku/hard"
@@ -21,6 +22,10 @@ KEY_VALUES = {
     pygame.K_9: "9",
     pygame.K_BACKSPACE: "0",
 }
+
+
+def load_image(tag: str):
+    return pygame.image.load(Path(f"{IMAGES}/{tag}.png").resolve())
 
 
 def fetch_puzzle_data():

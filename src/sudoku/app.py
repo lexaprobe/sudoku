@@ -26,18 +26,20 @@ def init():
     sudoku.title = msg
 
     buttons = []
-    # buttons.append(Button(10, 10, 80, 80))
-    # buttons.append(Button(110, 10, 80, 80))
-    # buttons.append(Button(210, 10, 80, 80))
-    # buttons.append(Button(610, 10, 80, 80))
-    # buttons.append(Button(710, 10, 80, 80))
-    # buttons.append(Button(810, 10, 80, 80))
+    buffer = 0.2 * BOX_SIZE
+    size = BOX_SIZE - 2 * buffer
 
-    header = Header(0, 0, GRID_SIZE, HEAD_OFFSET, buttons)
+    pause = Button(buffer, buffer - 10, size, size, tag="Pause")
+    pause.add_image(util.load_image(pause.tag))
+    buttons.append(pause)
+
+    reset = Button(buffer + 8 * BOX_SIZE, buffer - 10, size, size, tag="Reset")
+    reset.add_image(util.load_image(reset.tag))
+    buttons.append(reset)
 
     renderer = Renderer(GRID_SIZE, GRID_SIZE + HEAD_OFFSET)
-    renderer.add_viewpane(Grid(0, HEAD_OFFSET, GRID_SIZE, GRID_SIZE))
-    renderer.add_viewpane(header)
+    renderer.add_viewpane(Grid(0, HEAD_OFFSET, GRID_SIZE, GRID_SIZE, tag="grid"))
+    renderer.add_viewpane(Header(0, 0, GRID_SIZE, HEAD_OFFSET, buttons, tag="header"))
     renderer.set_caption("Sudoku")
 
     run(sudoku, renderer)
@@ -48,6 +50,11 @@ def run(sudoku: Sudoku, renderer: Renderer):
     frames = 0
     coords = None
     clock = pygame.time.Clock()
+    viewpanes = renderer.viewpanes()
+    button_pause = viewpanes["header"].get_button("Pause")
+    button_reset = viewpanes["header"].get_button("Reset")
+    if button_pause is None or button_reset is None:
+        return
 
     while True:
         cell = sudoku.current_cell()
@@ -62,10 +69,22 @@ def run(sudoku: Sudoku, renderer: Renderer):
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 coords = pygame.mouse.get_pos()
             elif event.type == pygame.KEYDOWN:
-                if event.key in [pygame.K_ESCAPE, pygame.K_p]:
+                if event.key == pygame.K_ESCAPE:
                     state.paused = not state.paused
                 elif not state.paused and not state.solved:
                     handle_input(state, util.get_digit(event.key), cell)
+
+        if button_pause.is_pressed():
+            state.paused = not state.paused
+            if state.paused:
+                button_pause.tag = "Play"
+            else:
+                button_pause.tag = "Pause"
+
+        if button_reset.is_pressed():
+            sudoku.reset()
+            state.reset()
+            frames = 0
 
         if not state.solved:
             state.solved = sudoku.is_solved()

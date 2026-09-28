@@ -11,3 +11,8 @@ class PuzzleState:
         self.solved = False
         self.time = (0, 0, 0)
         self.solve_time = self.time
+
+    def reset(self):
+        self.solved = False
+        self.time = (0, 0, 0)
+        self.solve_time = self.time
