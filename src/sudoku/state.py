@@ -16,3 +16,13 @@ class PuzzleState:
         self.solved = False
         self.time = (0, 0, 0)
         self.solve_time = self.time
+
+    def load(self, state: dict):
+        """Loads a state from a given json object"""
+        # TODO
+        pass
+
+    def freeze(self) -> dict:
+        """Saves the current state as a json object"""
+        # TODO
+        return {}

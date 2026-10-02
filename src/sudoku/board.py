@@ -24,7 +24,7 @@ BOXES = [BOX_1, BOX_2, BOX_3, BOX_4, BOX_5, BOX_6, BOX_7, BOX_8, BOX_9]
 
 class Cell:
     _digit: str
-    _index: int | None
+    _index: int = -1
     _candidates: list[str]
     _fixed: bool = False
 
@@ -36,7 +36,7 @@ class Cell:
     def digit(self) -> str:
         return self._digit
 
-    def index(self) -> int | None:
+    def index(self) -> int:
         return self._index
 
     def candidates(self) -> list[str]:
@@ -49,7 +49,7 @@ class Cell:
         return digit in [str(d) for d in range(10)]
 
     def sightline(self) -> list[int]:
-        if self._index is None:
+        if self._index == -1:
             return []
 
         col_number = self._index % 9
@@ -100,38 +100,26 @@ class Sudoku:
         self._puzzle = puzzle
         self.title = title
         for i in range(81):
-            cell = self._cells[i]
+            cell = self.get_cell(i)
             cell.insert_digit(puzzle[i])
             if puzzle[i] != "0":
                 cell.fix_digit()
         return True
 
-    def set_current_cell(self, index: int | None):
-        if index is None or not index in range(81):
+    def set_current_cell(self, index: int):
+        if not index in range(81):
             self._current_cell = None
             return
-        cell = self._cells[index]
-        if cell != None:
-            self._current_cell = cell
+        self._current_cell = self.get_cell(index)
         return True
 
     def get_cells(self) -> list[Cell]:
         return self._cells
 
-    def get_cell(self, index: int) -> Cell | None:
+    def get_cell(self, index: int) -> Cell:
         if not index in range(81):
-            return None
+            raise IndexError
         return self._cells[index]
-
-    def insert_digit(self, digit: str, cell: Cell | None):
-        if cell is None:
-            return
-        cell.insert_digit(digit)
-
-    def insert_candidate(self, digit: str, cell: Cell | None):
-        if cell is None:
-            return
-        cell.insert_candidate(digit)
 
     def reset(self):
         for c in self._cells:
@@ -155,7 +143,7 @@ class Sudoku:
             if cell.digit() == "0":
                 return False
             for i in cell.sightline():
-                if self._cells[i].digit() == cell.digit():
+                if self.get_cell(i).digit() == cell.digit():
                     return False
         return True
 
@@ -168,9 +156,6 @@ class Sudoku:
         vline = "|"
         for i in range(81):
             cell = self.get_cell(i)
-            if cell is None:
-                # something has gone very wrong here
-                raise IndexError
             if i % 27 == 0:
                 pstr += hline
             if i % 9 == 0:

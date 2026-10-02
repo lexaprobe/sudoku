@@ -4,14 +4,17 @@ import pygame
 
 from . import util
 from .board import Cell, Sudoku
-from .gfx import Button, Grid, Header, Renderer
+from .display import Button, Grid, Header, Sidebar, WindowManager
 from .state import PuzzleState
 
 FPS = 60
 
 GRID_SIZE = 750
 BOX_SIZE = GRID_SIZE / 9
-HEAD_OFFSET = BOX_SIZE
+HEAD_BUFFER = BOX_SIZE
+SIDE_BUFFER = 4 * BOX_SIZE
+WINDOW_WIDTH = GRID_SIZE + SIDE_BUFFER
+WINDOW_HEIGHT = GRID_SIZE + HEAD_BUFFER
 
 
 def init():
@@ -33,31 +36,28 @@ def init():
     pause.add_image(util.load_image(pause.tag))
     buttons.append(pause)
 
-    reset = Button(buffer + 8 * BOX_SIZE, buffer - 10, size, size, tag="Reset")
+    reset = Button(buffer + 12 * BOX_SIZE, buffer - 10, size, size, tag="Reset")
     reset.add_image(util.load_image(reset.tag))
     buttons.append(reset)
 
-    renderer = Renderer(GRID_SIZE, GRID_SIZE + HEAD_OFFSET)
-    renderer.add_viewpane(Grid(0, HEAD_OFFSET, GRID_SIZE, GRID_SIZE, tag="grid"))
-    renderer.add_viewpane(Header(0, 0, GRID_SIZE, HEAD_OFFSET, buttons, tag="header"))
-    renderer.set_caption("Sudoku")
+    wm = WindowManager(WINDOW_WIDTH, WINDOW_HEIGHT)
+    wm.add_viewpane(Grid(0, HEAD_BUFFER, GRID_SIZE, GRID_SIZE))
+    wm.add_viewpane(Sidebar(GRID_SIZE, HEAD_BUFFER, SIDE_BUFFER, GRID_SIZE))
+    wm.add_viewpane(Header(0, 0, WINDOW_WIDTH, HEAD_BUFFER, buttons))
+    wm.set_caption("Sudoku")
 
-    run(sudoku, renderer)
+    run(sudoku, wm)
 
 
-def run(sudoku: Sudoku, renderer: Renderer):
+def run(sudoku: Sudoku, wm: WindowManager):
     state = PuzzleState()
     frames = 0
     coords = None
     clock = pygame.time.Clock()
-    viewpanes = renderer.viewpanes()
-    button_pause = viewpanes["header"].get_button("Pause")
-    button_reset = viewpanes["header"].get_button("Reset")
-    if button_pause is None or button_reset is None:
-        return
+    b_pause = wm.get_button("Pause")
+    b_reset = wm.get_button("Reset")
 
     while True:
-        cell = sudoku.current_cell()
         state.candidate_mode = (
             True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
         )
@@ -72,16 +72,18 @@ def run(sudoku: Sudoku, renderer: Renderer):
                 if event.key == pygame.K_ESCAPE:
                     state.paused = not state.paused
                 elif not state.paused and not state.solved:
-                    handle_input(state, util.get_digit(event.key), cell)
+                    handle_input(
+                        state, util.get_digit(event.key), sudoku.current_cell()
+                    )
 
-        if button_pause.is_pressed():
+        if b_pause.is_pressed():
             state.paused = not state.paused
             if state.paused:
-                button_pause.tag = "Play"
+                b_pause.tag = "Play"
             else:
-                button_pause.tag = "Pause"
+                b_pause.tag = "Pause"
 
-        if button_reset.is_pressed():
+        if b_reset.is_pressed():
             sudoku.reset()
             state.reset()
             frames = 0
@@ -99,7 +101,7 @@ def run(sudoku: Sudoku, renderer: Renderer):
             clock.tick(FPS)
             frames += 1
 
-        renderer.update(state, sudoku)
+        wm.update(state, sudoku)
 
 
 def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
@@ -113,15 +115,15 @@ def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
         cell.insert_digit(digit)
 
 
-def find_cell(coords: tuple[int, int] | None) -> int | None:
-    if coords is None or coords[1] <= HEAD_OFFSET:
-        return None
+def find_cell(coords: tuple[int, int] | None) -> int:
+    if coords is None or coords[1] <= HEAD_BUFFER:
+        return -1
     cell_index = 0
-    for y in util.fstep(HEAD_OFFSET, BOX_SIZE, 9):
+    for y in util.fstep(HEAD_BUFFER, BOX_SIZE, 9):
         for x in util.fstep(0, BOX_SIZE, 9):
             x_diff = coords[0] - x
             y_diff = coords[1] - y
             if x_diff <= BOX_SIZE and y_diff <= BOX_SIZE:
                 return cell_index
             cell_index += 1
-    return None
+    return -1

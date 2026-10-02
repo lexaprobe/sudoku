@@ -20,6 +20,31 @@ FONT_M = 50
 FONT_L = 70
 
 
+def get_cell_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
+    current_cell = sudoku.current_cell()
+    colour = WHITE
+    if cell.is_fixed():
+        colour = GREY
+    if current_cell != None:
+        if cell == current_cell or (
+            cell.digit() == current_cell.digit() and cell.digit() != "0"
+        ):
+            colour = YELLOW
+        if cell.index() in current_cell.sightline():
+            colour = BLUE
+    return colour
+
+
+def get_digit_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
+    digit_colour = DARK_BLUE if not cell.is_fixed() else BLACK
+    for i in cell.sightline():
+        c = sudoku.get_cell(i)
+        if c.digit() == cell.digit():
+            digit_colour = RED
+            break
+    return digit_colour
+
+
 class FontManager:
     _fonts: dict = {}
 
@@ -43,8 +68,6 @@ class Button:
         self.tag = tag
 
     def add_image(self, image: pygame.Surface):
-        if image is None:
-            return
         self.image = pygame.transform.smoothscale(image, (self.rect.w, self.rect.h))
         x, y = self.rect.x, self.rect.y
         self.rect = self.image.get_rect()
@@ -68,6 +91,10 @@ class Button:
     def scale(self, factor: float):
         r = self.rect
         self.rect = pygame.Rect(r.x, r.y, r.w * factor, r.h * factor)
+
+    def draw(self):
+        # TODO
+        pass
 
 
 class ViewPane(ABC):
@@ -98,15 +125,33 @@ class ViewPane(ABC):
     ) -> pygame.Surface:
         return self.surface
 
-    def get_button(self, button_tag: str) -> Button | None:
+    def scale(self, value: float, side: str = "w") -> int:
+        """Scales a value with one of this ViewPane's dimensions"""
+        if side not in ["w", "h"]:
+            raise ValueError
+        if side == "w":
+            factor = self.surface.get_rect().w
+        elif side == "h":
+            factor = self.surface.get_rect().h
+        return max((int)(value * factor / 900), 1)
+
+    def outline(self, color: pygame.Color = BLACK):
+        rect = self.surface.get_rect()
+        line = self.scale(4)
+        # top outline
+        pygame.draw.line(self.surface, color, (0, 0), (rect.w, 0), line)
+        # bottom outline
+        pygame.draw.line(self.surface, color, (0, rect.h), (rect.w, rect.h), line)
+        # left outline
+        pygame.draw.line(self.surface, color, (0, 0), (0, rect.h), line)
+        # right outline
+        pygame.draw.line(self.surface, color, (rect.w, 0), (rect.w, rect.h), line)
+
+    def get_button(self, button_tag: str) -> Button:
         for b in self.buttons:
             if b.tag == button_tag:
                 return b
-        return None
-
-    def scale(self, value: float) -> int:
-        """Scales a value with this ViewPane's dimensions"""
-        return max((int)(value * self.surface.get_rect().w / 900), 1)
+        raise KeyError
 
 
 class Grid(ViewPane):
@@ -129,23 +174,14 @@ class Grid(ViewPane):
 
         self.surface.fill(WHITE)
 
-        if state.paused:
-            display = font_l.render("PAUSED", 1, BLACK)
-            self.surface.blit(display, display.get_rect(center=grid.center))
-            pygame.draw.line(self.surface, BLACK, (0, 0), (grid.w, 0), line)
-            return self.surface
-
         cell_w = grid.w / 9
         cell_h = grid.h / 9
         index = 0
-        current_cell = sudoku.current_cell()
         for y in fstep(0, cell_h, 9):
             for x in fstep(0, cell_w, 9):
                 cell = sudoku.get_cell(index)
-                if cell is None:
-                    continue
                 # colour cell
-                cell_colour = Renderer.get_cell_colour(cell, current_cell)
+                cell_colour = get_cell_colour(cell, sudoku)
                 cell_rect = pygame.draw.rect(
                     self.surface,
                     cell_colour,
@@ -153,7 +189,7 @@ class Grid(ViewPane):
                 )
                 # draw cell digit(s)
                 if cell.digit() != "0":
-                    digit_colour = Renderer.get_digit_colour(cell, sudoku)
+                    digit_colour = get_digit_colour(cell, sudoku)
                     cell_display = font_l.render(cell.digit(), 1, digit_colour)
                     self.surface.blit(
                         cell_display, cell_display.get_rect(center=cell_rect.center)
@@ -170,21 +206,30 @@ class Grid(ViewPane):
                 index += 1
 
         # split grid into 9 equal-sized boxes
-        h1 = grid.w / 3
-        v1 = grid.h / 3
-        h2 = 2 * grid.w / 3
-        v2 = 2 * grid.h / 3
-        pygame.draw.line(self.surface, BLACK, (h1, 0), (h1, grid.h), line)
-        pygame.draw.line(self.surface, BLACK, (h2, 0), (h2, grid.h), line)
-        pygame.draw.line(self.surface, BLACK, (0, 0), (grid.w, 0), line)
-        pygame.draw.line(self.surface, BLACK, (0, v1), (grid.w, v1), line)
-        pygame.draw.line(self.surface, BLACK, (0, v2), (grid.w, v2), line)
+        d1 = grid.w / 3
+        d2 = 2 * grid.w / 3
+        pygame.draw.line(self.surface, BLACK, (d1, 0), (d1, grid.h), line)
+        pygame.draw.line(self.surface, BLACK, (d2, 0), (d2, grid.h), line)
+        pygame.draw.line(self.surface, BLACK, (0, d1), (grid.w, d1), line)
+        pygame.draw.line(self.surface, BLACK, (0, d2), (grid.w, d2), line)
 
         # split each box into 9 equal-sized cells
         for x in fstep(0, cell_w, 9):
             pygame.draw.line(self.surface, BLACK, (x, 0), (x, grid.h))
         for y in fstep(0, cell_h, 9):
             pygame.draw.line(self.surface, BLACK, (0, y), (grid.w, y))
+
+        if state.paused:
+            block = pygame.Surface(grid.size, pygame.SRCALPHA)
+            block.fill((255, 255, 255, 128))
+            self.surface.blit(block, (0, 0))
+            buf = 0.15 * grid.w
+            backer = pygame.Rect(d1 - buf, d1 - buf, d1 + 2 * buf, d1 + 2 * buf)
+            pygame.draw.rect(self.surface, GREY, backer, border_radius=5)
+            display = font_l.render("PAUSED", 1, BLACK)
+            self.surface.blit(display, display.get_rect(center=backer.center))
+
+        self.outline()
 
         return self.surface
 
@@ -198,8 +243,8 @@ class Header(ViewPane):
     def draw(
         self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
     ) -> pygame.Surface:
-        font_s = fm.load_font(self.scale(FONT_S))
-        font_xs = fm.load_font(self.scale(FONT_XS))
+        font_s = fm.load_font(max(self.scale(FONT_S) - 6, 6))
+        font_xs = fm.load_font(max(self.scale(FONT_XS) - 6, 6))
 
         self.surface.fill(GREY)
 
@@ -235,13 +280,35 @@ class Header(ViewPane):
                 ),
             )
 
+        self.outline()
+
         return self.surface
 
 
-class Renderer:
+class Sidebar(ViewPane):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tag == "pane":
+            self.tag = "sidebar"
+
+    def draw(
+        self, state: PuzzleState, sudoku: Sudoku, fm: FontManager
+    ) -> pygame.Surface:
+        self.surface.fill(GREY)
+        # TODO
+        self.outline()
+        return self.surface
+
+
+class WindowManager:
+    """Collates all app viewpanes and manages the main pygame window.
+
+    This class should act as an intermediary such that each viewpane is updated and rendered in sync. Beyond instantiation, an app should only interact with viewpanes through a WindowManager.
+    """
+
     _window: pygame.Surface
     _font_manager: FontManager
-    panes: list[ViewPane] = []
+    _viewpanes: list[ViewPane] = []
 
     def __init__(self, width: float, height: float):
         pygame.init()
@@ -249,47 +316,31 @@ class Renderer:
         self._font_manager = FontManager()
 
     def update(self, state: PuzzleState, sudoku: Sudoku):
-        for p in self.panes:
-            if p is None:
-                continue
-            self._window.blit(p.draw(state, sudoku, self._font_manager), (p.x, p.y))
+        for v in self._viewpanes:
+            self._window.blit(v.draw(state, sudoku, self._font_manager), (v.x, v.y))
         pygame.display.flip()
 
-    def add_viewpane(self, p: ViewPane):
-        if p is not None:
-            self.panes.append(p)
+    def add_viewpane(self, v: ViewPane):
+        self._viewpanes.append(v)
 
-    def viewpanes(self) -> dict[str, ViewPane]:
+    def get_viewpane(self, tag: str) -> ViewPane:
+        for v in self._viewpanes:
+            if v.tag == tag:
+                return v
+        raise KeyError
+
+    def get_viewpanes(self) -> dict[str, ViewPane]:
         viewpanes = {}
-        for p in self.panes:
-            viewpanes[p.tag] = p
+        for v in self._viewpanes:
+            viewpanes[v.tag] = v
         return viewpanes
+
+    def get_button(self, tag: str) -> Button:
+        for v in self._viewpanes:
+            for b in v.buttons:
+                if b.tag == tag:
+                    return b
+        raise KeyError
 
     def set_caption(self, caption: str):
         pygame.display.set_caption(caption)
-
-    @staticmethod
-    def get_cell_colour(cell: Cell | None, current_cell: Cell | None) -> pygame.Color:
-        if cell is None:
-            return WHITE
-        colour = WHITE
-        if cell.is_fixed():
-            colour = GREY
-        if current_cell != None:
-            if cell == current_cell or (
-                cell.digit() == current_cell.digit() and cell.digit() != "0"
-            ):
-                colour = YELLOW
-            if cell.index() in current_cell.sightline():
-                colour = BLUE
-        return colour
-
-    @staticmethod
-    def get_digit_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
-        digit_colour = DARK_BLUE if not cell.is_fixed() else BLACK
-        for i in cell.sightline():
-            c = sudoku.get_cell(i)
-            if c != None and c.digit() == cell.digit():
-                digit_colour = RED
-                break
-        return digit_colour
