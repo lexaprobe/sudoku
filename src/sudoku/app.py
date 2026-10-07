@@ -4,20 +4,11 @@ import pygame
 
 from . import util
 from .board import Cell, Sudoku
-from .display import Button, Grid, Header, Sidebar, WindowManager
+from .display import ScreenManager, ScreenTag
 from .state import PuzzleState
 
-FPS = 60
 
-GRID_SIZE = 750
-BOX_SIZE = GRID_SIZE / 9
-HEAD_BUFFER = BOX_SIZE
-SIDE_BUFFER = 4 * BOX_SIZE
-WINDOW_WIDTH = GRID_SIZE + SIDE_BUFFER
-WINDOW_HEIGHT = GRID_SIZE + HEAD_BUFFER
-
-
-def init():
+def init(window_width: int = 1040, fps: int = 60):
     sudoku = Sudoku()
     puzzle, msg = util.get_puzzle(sys.argv)
     if puzzle == "":
@@ -28,40 +19,23 @@ def init():
         exit(2)
     sudoku.title = msg
 
-    buttons = []
-    buffer = 0.2 * BOX_SIZE
-    size = BOX_SIZE - 2 * buffer
+    sm = ScreenManager(window_width)
+    sm.add_screen(ScreenTag.PUZZLE)
+    sm.swap_screen(ScreenTag.PUZZLE)
+    sm.set_caption("Sudoku")
 
-    pause = Button(buffer, buffer - 10, size, size, tag="Pause")
-    pause.add_image(util.load_image(pause.tag))
-    buttons.append(pause)
-
-    reset = Button(buffer + 12 * BOX_SIZE, buffer - 10, size, size, tag="Reset")
-    reset.add_image(util.load_image(reset.tag))
-    buttons.append(reset)
-
-    wm = WindowManager(WINDOW_WIDTH, WINDOW_HEIGHT)
-    wm.add_viewpane(Grid(0, HEAD_BUFFER, GRID_SIZE, GRID_SIZE))
-    wm.add_viewpane(Sidebar(GRID_SIZE, HEAD_BUFFER, SIDE_BUFFER, GRID_SIZE))
-    wm.add_viewpane(Header(0, 0, WINDOW_WIDTH, HEAD_BUFFER, buttons))
-    wm.set_caption("Sudoku")
-
-    run(sudoku, wm)
+    run(sm, PuzzleState(sudoku), fps)
 
 
-def run(sudoku: Sudoku, wm: WindowManager):
-    state = PuzzleState()
+def run(sm: ScreenManager, state: PuzzleState, fps: int):
     frames = 0
     coords = None
     clock = pygame.time.Clock()
-    b_pause = wm.get_button("Pause")
-    b_reset = wm.get_button("Reset")
 
     while True:
         state.candidate_mode = (
             True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
         )
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -71,37 +45,18 @@ def run(sudoku: Sudoku, wm: WindowManager):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     state.paused = not state.paused
-                elif not state.paused and not state.solved:
+                if not state.paused and not state.solved:
                     handle_input(
-                        state, util.get_digit(event.key), sudoku.current_cell()
+                        state, util.get_digit(event.key), state.sudoku.current_cell()
                     )
 
-        if b_pause.is_pressed():
-            state.paused = not state.paused
-            if state.paused:
-                b_pause.tag = "Play"
-            else:
-                b_pause.tag = "Pause"
-
-        if b_reset.is_pressed():
-            sudoku.reset()
-            state.reset()
-            frames = 0
-
-        if not state.solved:
-            state.solved = sudoku.is_solved()
-            if state.solved:
-                state.solve_time = util.get_time(frames, FPS)
-
+        state.update(frames, fps)
         if not state.paused:
-            sudoku.set_current_cell(find_cell(coords))
-            state.time = (
-                state.solve_time if state.solved else util.get_time(frames, FPS)
-            )
-            clock.tick(FPS)
+            cell = find_cell(round(sm.width() / 13), coords)
+            state.sudoku.set_current_cell(cell)
+            clock.tick(fps)
             frames += 1
-
-        wm.update(state, sudoku)
+        sm.update(state)
 
 
 def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
@@ -115,15 +70,15 @@ def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
         cell.insert_digit(digit)
 
 
-def find_cell(coords: tuple[int, int] | None) -> int:
-    if coords is None or coords[1] <= HEAD_BUFFER:
+def find_cell(block_size: int, coords: tuple[int, int] | None) -> int:
+    if coords is None or coords[1] <= block_size:
         return -1
     cell_index = 0
-    for y in util.fstep(HEAD_BUFFER, BOX_SIZE, 9):
-        for x in util.fstep(0, BOX_SIZE, 9):
+    for y in util.fstep(block_size, block_size, 9):
+        for x in util.fstep(0, block_size, 9):
             x_diff = coords[0] - x
             y_diff = coords[1] - y
-            if x_diff <= BOX_SIZE and y_diff <= BOX_SIZE:
+            if x_diff <= block_size and y_diff <= block_size:
                 return cell_index
             cell_index += 1
     return -1
