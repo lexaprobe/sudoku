@@ -5,8 +5,8 @@ import pygame
 
 from .board import Cell, Sudoku
 from .interface import Button, ButtonTag
-from .state import PuzzleState
-from .util import fstep, load_image
+from .state import AppState, Event, PuzzleState
+from .util import fstep, image_path
 
 GREY = pygame.Color(223, 223, 223)
 YELLOW = pygame.Color(249, 219, 74)
@@ -89,8 +89,20 @@ class Screen(ABC):
         self.tag = tag
 
     @abstractmethod
-    def draw(self, state: PuzzleState, fm: FontManager) -> pygame.Surface:
+    def load_buttons(self, size: int):
+        pass
+
+    @abstractmethod
+    def draw(self, *args, **kwargs) -> pygame.Surface:
         return self.screen
+
+    @abstractmethod
+    def query(self, mouse_click: tuple[int, int]) -> Event:
+        return Event.NONE
+
+    @abstractmethod
+    def get_button_event(self, b: Button) -> Event:
+        return Event.NONE
 
     def scale(self, value: float, side: str = "w") -> int:
         """Scales a value with one of this screen's dimensions"""
@@ -103,13 +115,22 @@ class Screen(ABC):
         return max(round(value * factor / 1000), 1)
 
 
+# TODO
 class MenuScreen(Screen):
     def __init__(self, size: tuple[int, int]):
         super().__init__(size, ScreenTag.MENU)
 
-    def draw(self, *args, **kwargs) -> pygame.Surface:
-        # TODO
+    def load_buttons(self, size: int):
+        pass
+
+    def draw(self, state: AppState) -> pygame.Surface:
         return self.screen
+
+    def query(self, mouse_pos: tuple[int, int]) -> Event:
+        return Event.NONE
+
+    def get_button_event(self, b: Button) -> Event:
+        return Event.NONE
 
 
 class PuzzleScreen(Screen):
@@ -133,65 +154,81 @@ class PuzzleScreen(Screen):
         backer = pygame.Rect((0, 0), (6 * bw, 4 * bw))
         backer.center = (round(w / 2), round(bw + (bw * 9 / 2)))
         self.popup = Pane.from_rect(backer)
-        # self.load_buttons()
+        self.load_buttons(round(bw / 2))
 
-    def load_buttons(self):
-        b1 = Button(20, 20, 60, 60, ButtonTag.PAUSE)
-        b1.set_image(load_image(ButtonTag.PAUSE.value))
-        b1.scale(0.8)
-        self.buttons[ButtonTag.PAUSE] = b1
+    def load_buttons(self, size: int):
+        buttons = []
+        buttons.append(Button(20, 10, size, size, ButtonTag.PAUSE))
+        buttons.append(Button(20 + 2 * size, 10, size, size, ButtonTag.HINT))
+        buttons.append(Button(20 + 4 * size, 10, size, size, ButtonTag.DELETE))
+        buttons.append(Button(20 + 20 * size, 10, size, size, ButtonTag.SAVE))
+        buttons.append(Button(20 + 22 * size, 10, size, size, ButtonTag.LOAD))
+        buttons.append(Button(20 + 24 * size, 10, size, size, ButtonTag.RESET))
 
-    def draw(self, state: PuzzleState, fm: FontManager) -> pygame.Surface:
+        for b in buttons:
+            b.set_image(image_path(b.tag.value))
+            self.buttons[b.tag] = b
+
+    def query(self, mouse_pos: tuple[int, int]) -> Event:
+        for _, b in self.buttons.items():
+            if b.is_pressed(mouse_pos):
+                return self.get_button_event(b)
+        # TODO: check if keypad on sidebar is pressed here
+        return Event.NONE
+
+    def get_button_event(self, b: Button) -> Event:
+        if b is None:
+            return Event.NONE
+        match b.tag:
+            case ButtonTag.PAUSE:
+                self.buttons.pop(b.tag)
+                b.tag = ButtonTag.RESUME
+                b.set_image(image_path(b.tag.value))
+                self.buttons[b.tag] = b
+                return Event.PAUSE
+            case ButtonTag.RESUME:
+                self.buttons.pop(b.tag)
+                b.tag = ButtonTag.PAUSE
+                b.set_image(image_path(b.tag.value))
+                self.buttons[b.tag] = b
+                return Event.RESUME
+            case ButtonTag.RESET:
+                return Event.RESET
+            case ButtonTag.SAVE:
+                return Event.SAVE
+            case ButtonTag.LOAD:
+                return Event.LOAD
+            case ButtonTag.DELETE:
+                return Event.DELETE
+            case ButtonTag.HINT:
+                return Event.HINT
+            case _:
+                return Event.NONE
+
+    def draw(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
         self.screen.fill(WHITE)
 
-        self.screen.blit(self.draw_header(state, fm), self.header.pos())
-        self.screen.blit(self.draw_grid(state, fm), self.grid.pos())
-        self.screen.blit(self.draw_sidebar(state, fm), self.sidebar.pos())
+        self.screen.blit(self.draw_grid(puzzle, fm), self.grid.pos())
+        self.screen.blit(self.draw_header(puzzle, fm), self.header.pos())
+        self.screen.blit(self.draw_sidebar(puzzle, fm), self.sidebar.pos())
 
-        if state.paused:
+        font_xs = fm.load_font(self.scale(FONT_XS))
+        for _, b in self.buttons.items():
+            self.screen.blit(b.image.convert_alpha(), b.pos())
+            text = font_xs.render(b.tag.value, 1, BLACK)
+            self.screen.blit(
+                text,
+                text.get_rect(center=b.tag_pos()),
+            )
+
+        if puzzle.paused:
             self.overlay.surface.fill((255, 255, 255, 128))
             self.screen.blit(self.overlay.surface, self.overlay.pos())
             self.screen.blit(self.draw_popup(fm), self.popup.pos())
 
         return self.screen
 
-    def draw_header(self, state: PuzzleState, fm: FontManager) -> pygame.Surface:
-        font_m = fm.load_font(self.scale(FONT_M))
-        font_s = fm.load_font(self.scale(FONT_S))
-
-        time = state.time
-        clock = f"{str(time[1]).rjust(2, "0")}:{str(time[0]).rjust(2, "0")}"
-        if time[2] != 0:
-            clock = f"{time[2]}:" + clock
-        if not state.solved:
-            msg_1 = clock
-            msg_2 = state.sudoku.title
-        else:
-            msg_1 = "Congratulations!"
-            msg_2 = f"Puzzle solved in {clock}"
-
-        self.header.surface.fill(GREY)
-        head = self.header.rect()
-        display_1 = font_m.render(msg_1, 1, BLACK)
-        rect_1 = pygame.Rect(0, head.h * 0.1, head.w, head.h * 0.5)
-        self.header.surface.blit(display_1, display_1.get_rect(center=rect_1.center))
-        display_2 = font_s.render(msg_2, 1, BLACK)
-        rect_2 = pygame.Rect(0, head.h * 0.5, head.w, head.h * 0.5)
-        self.header.surface.blit(display_2, display_2.get_rect(center=rect_2.center))
-
-        font_xs = fm.load_font(self.scale(FONT_XS))
-        for tag, b in self.buttons.items():
-            self.header.surface.blit(b.image, b.pos())
-            text = font_xs.render(tag.value, 1, BLACK)
-            self.header.surface.blit(
-                text,
-                text.get_rect(center=b.tag_pos()),
-            )
-
-        self.header.outline(width=self.scale(4))
-        return self.header.surface
-
-    def draw_grid(self, state: PuzzleState, fm: FontManager) -> pygame.Surface:
+    def draw_grid(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
         font_l = fm.load_font(self.scale(FONT_L))
         font_xs = fm.load_font(self.scale(FONT_XS))
 
@@ -203,9 +240,9 @@ class PuzzleScreen(Screen):
         index = 0
         for y in fstep(0, cell_h, 9):
             for x in fstep(0, cell_w, 9):
-                cell = state.sudoku.get_cell(index)
+                cell = puzzle.sudoku.get_cell(index)
                 # colour cell
-                cell_colour = get_cell_colour(cell, state.sudoku)
+                cell_colour = get_cell_colour(cell, puzzle.sudoku)
                 cell_rect = pygame.draw.rect(
                     self.grid.surface,
                     cell_colour,
@@ -213,7 +250,7 @@ class PuzzleScreen(Screen):
                 )
                 # draw cell digit(s)
                 if cell.digit() != "0":
-                    digit_colour = get_digit_colour(cell, state.sudoku)
+                    digit_colour = get_digit_colour(cell, puzzle.sudoku)
                     cell_display = font_l.render(cell.digit(), 1, digit_colour)
                     self.grid.surface.blit(
                         cell_display, cell_display.get_rect(center=cell_rect.center)
@@ -247,7 +284,34 @@ class PuzzleScreen(Screen):
         self.grid.outline(width=line)
         return self.grid.surface
 
-    def draw_sidebar(self, state: PuzzleState, fm: FontManager) -> pygame.Surface:
+    def draw_header(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
+        font_m = fm.load_font(self.scale(FONT_M))
+        font_s = fm.load_font(self.scale(FONT_S))
+
+        time = puzzle.time
+        clock = f"{str(time[1]).rjust(2, "0")}:{str(time[0]).rjust(2, "0")}"
+        if time[2] != 0:
+            clock = f"{time[2]}:" + clock
+        if not puzzle.solved:
+            msg_1 = clock
+            msg_2 = puzzle.sudoku.title
+        else:
+            msg_1 = "Congratulations!"
+            msg_2 = f"Puzzle solved in {clock}"
+
+        self.header.surface.fill(GREY)
+        head = self.header.rect()
+        display_1 = font_m.render(msg_1, 1, BLACK)
+        rect_1 = pygame.Rect(0, head.h * 0.1, head.w, head.h * 0.5)
+        self.header.surface.blit(display_1, display_1.get_rect(center=rect_1.center))
+        display_2 = font_s.render(msg_2, 1, BLACK)
+        rect_2 = pygame.Rect(0, head.h * 0.5, head.w, head.h * 0.5)
+        self.header.surface.blit(display_2, display_2.get_rect(center=rect_2.center))
+
+        self.header.outline(width=self.scale(4))
+        return self.header.surface
+
+    def draw_sidebar(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
         self.sidebar.surface.fill(GREY)
 
         rect = self.sidebar.rect()
@@ -261,7 +325,7 @@ class PuzzleScreen(Screen):
         pygame.draw.line(self.sidebar.surface, BLACK, (xe, yo), (xe, ye))  # right
         pygame.draw.line(self.sidebar.surface, BLACK, (xo, yo), (xo, ye))  # left
 
-        font_size = FONT_XS if state.candidate_mode else FONT_M
+        font_size = FONT_XS if puzzle.candidate_mode else FONT_M
         font = fm.load_font(self.scale(font_size))
         div = round(rect.w / 4)
         i = 1
@@ -278,9 +342,6 @@ class PuzzleScreen(Screen):
             pygame.draw.line(self.sidebar.surface, BLACK, (x, yo), (x, ye))
         for y in fstep(yo, div, 3):
             pygame.draw.line(self.sidebar.surface, BLACK, (xo, y), (xe, y))
-
-        # pygame.draw.line(self.sidebar.surface, BLACK, (xo, yo - xo), (xe, yo - xo))
-        # pygame.draw.line(self.sidebar.surface, BLACK, (xo, ye + xo), (xe, ye + xo))
 
         self.sidebar.outline(width=self.scale(4))
         return self.sidebar.surface
@@ -301,13 +362,16 @@ class ScreenManager:
     _font_manager: FontManager
     _screens: dict[ScreenTag, Screen] = {}
     _current: Screen | None = None
+    _clock: pygame.time.Clock
+    fps: int
 
-    def __init__(self, window_width: int):
-        pygame.init()
+    def __init__(self, window_width: int, fps: int):
         # maintain 13:10 screen size
         height = round(10 * window_width / 13)
         self._window = pygame.display.set_mode((window_width, height))
         self._font_manager = FontManager()
+        self._clock = pygame.time.Clock()
+        self.fps = fps
 
     def width(self) -> int:
         return self._window.get_rect().w
@@ -318,13 +382,14 @@ class ScreenManager:
     def size(self) -> tuple[int, int]:
         return self._window.get_size()
 
-    def update(self, state: PuzzleState):
+    def update(self, puzzle: PuzzleState):
         s = self._current
         if s != None:
-            screen = s.draw(state, self._font_manager)
+            screen = s.draw(puzzle, self._font_manager)
             scaled = pygame.transform.scale(screen, self.size())
             self._window.blit(scaled, (0, 0))
         pygame.display.flip()
+        self._clock.tick(self.fps)
 
     def add_screen(self, tag: ScreenTag):
         match tag:
@@ -342,10 +407,18 @@ class ScreenManager:
         return self._screens
 
     def swap_screen(self, tag: ScreenTag):
+        if tag not in list(self._screens):
+            self.add_screen(tag)
         self._current = self.get_screen(tag)
 
     def set_caption(self, caption: str):
         pygame.display.set_caption(caption)
+
+    def query(self, mouse_pos: tuple[int, int] | None) -> Event:
+        if self._current is not None and mouse_pos is not None:
+            return self._current.query(mouse_pos)
+        else:
+            return Event.NONE
 
 
 def get_cell_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:

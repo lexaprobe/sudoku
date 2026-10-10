@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import pygame
 import requests
 from bs4 import BeautifulSoup
 
@@ -10,22 +9,9 @@ PUZZLES = "src/sudoku/resources/puzzles.txt"
 
 NYT_SUDOKU_URL = "https://www.nytimes.com/puzzles/sudoku/hard"
 
-KEY_VALUES = {
-    pygame.K_1: "1",
-    pygame.K_2: "2",
-    pygame.K_3: "3",
-    pygame.K_4: "4",
-    pygame.K_5: "5",
-    pygame.K_6: "6",
-    pygame.K_7: "7",
-    pygame.K_8: "8",
-    pygame.K_9: "9",
-    pygame.K_BACKSPACE: "0",
-}
 
-
-def load_image(tag: str):
-    return pygame.image.load(Path(f"{IMAGES}/{tag}.png").resolve())
+def image_path(tag: str) -> str:
+    return str(Path(f"{IMAGES}/{tag}.png").resolve())
 
 
 def fetch_puzzle_data():
@@ -85,13 +71,6 @@ def get_time(frames: int, fps: int) -> tuple[int, int, int]:
     minutes = int((seconds - seconds % 60) / 60)
     hours = int((minutes - minutes % 60) / 60)
     return (seconds % 60, minutes % 60, hours % 24)
-
-
-def get_digit(key) -> str | None:
-    try:
-        return KEY_VALUES[key]
-    except KeyError:
-        return None
 
 
 def fstep(start: float, step: float, num_steps: int) -> list[float]:

@@ -1,14 +1,18 @@
 import sys
 
-import pygame
-
 from . import util
-from .board import Cell, Sudoku
+from .board import Sudoku
 from .display import ScreenManager, ScreenTag
-from .state import PuzzleState
+from .state import AppState, Event, PuzzleState
 
 
 def init(window_width: int = 1040, fps: int = 60):
+    app = AppState()
+
+    screen = ScreenManager(window_width, fps)
+    screen.swap_screen(ScreenTag.PUZZLE)
+    screen.set_caption("Sudoku")
+
     sudoku = Sudoku()
     puzzle, msg = util.get_puzzle(sys.argv)
     if puzzle == "":
@@ -19,52 +23,59 @@ def init(window_width: int = 1040, fps: int = 60):
         exit(2)
     sudoku.title = msg
 
-    sm = ScreenManager(window_width)
-    sm.add_screen(ScreenTag.PUZZLE)
-    sm.swap_screen(ScreenTag.PUZZLE)
-    sm.set_caption("Sudoku")
+    run_puzzle(app, PuzzleState(sudoku), screen)
 
-    run(sm, PuzzleState(sudoku), fps)
+    app.quit()
 
 
-def run(sm: ScreenManager, state: PuzzleState, fps: int):
+def run_puzzle(app: AppState, puzzle: PuzzleState, screen: ScreenManager):
     frames = 0
-    coords = None
-    clock = pygame.time.Clock()
-
     while True:
-        state.candidate_mode = (
-            True if pygame.key.get_mods() & pygame.KMOD_SHIFT else False
-        )
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                coords = pygame.mouse.get_pos()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    state.paused = not state.paused
-                if not state.paused and not state.solved:
-                    handle_input(
-                        state, util.get_digit(event.key), state.sudoku.current_cell()
-                    )
+        digit = None
+        hint = False
 
-        state.update(frames, fps)
-        if not state.paused:
-            cell = find_cell(round(sm.width() / 13), coords)
-            state.sudoku.set_current_cell(cell)
-            clock.tick(fps)
+        event = app.update()
+        if event == Event.QUIT:
+            return
+        elif event == Event.MOUSEDOWN:
+            action = screen.query(app.mouse_pos())
+            if action in [Event.PAUSE, Event.RESUME]:
+                puzzle.paused = not puzzle.paused
+            elif action == Event.RESET:
+                puzzle.reset()
+                frames = 0
+            elif action == Event.SAVE:
+                puzzle.freeze()
+            elif action == Event.LOAD:
+                puzzle.load({})
+            elif action == Event.DELETE:
+                digit = "0"
+            elif action == Event.HINT:
+                pass
+        elif event == Event.KEYDOWN:
+            digit = app.get_key()
+
+        puzzle.candidate_mode = True if app.shift_pressed() else False
+        if not puzzle.paused:
+            cc = 0
+            if not hint:
+                cc = find_cell(round(screen.width() / 13), app.mouse_pos())
+            puzzle.sudoku.set_current_cell(cc)
+            if not puzzle.solved:
+                handle_input(puzzle, digit)
             frames += 1
-        sm.update(state)
+        puzzle.update(frames, screen.fps)
+
+        screen.update(puzzle)
 
 
-def handle_input(state: PuzzleState, digit: str | None, cell: Cell | None):
+def handle_input(puzzle: PuzzleState, digit: str | None):
+    cell = puzzle.sudoku.current_cell()
     if digit is None or cell is None or cell.is_fixed():
         return
-    if digit == "0" and (state.candidate_mode or cell.digit() == "0"):
+    if digit == "0" and (puzzle.candidate_mode or cell.digit() == "0"):
         cell.clear_candidates()
-    elif state.candidate_mode:
+    elif puzzle.candidate_mode:
         cell.insert_candidate(digit)
     else:
         cell.insert_digit(digit)

@@ -107,11 +107,8 @@ class Sudoku:
         return True
 
     def set_current_cell(self, index: int):
-        if not index in range(81):
-            self._current_cell = None
-            return
-        self._current_cell = self.get_cell(index)
-        return True
+        if index in range(81):
+            self._current_cell = self.get_cell(index)
 
     def get_cells(self) -> list[Cell]:
         return self._cells

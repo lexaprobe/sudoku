@@ -5,7 +5,13 @@ import pygame
 
 class ButtonTag(Enum):
     PAUSE = "Pause"
+    RESUME = "Resume"
     RESET = "Reset"
+    SAVE = "Save"
+    LOAD = "Load"
+    HINT = "Hint"
+    SWITCH = "Switch Mode"
+    DELETE = "Delete"
 
 
 class Button:
@@ -21,35 +27,26 @@ class Button:
         self.image = pygame.Surface((w, h), pygame.SRCALPHA)
         self.tag = tag
 
-    def set_image(self, image: pygame.Surface):
-        rect = self.image.get_rect()
-        self.image = pygame.transform.smoothscale(image, (rect.w, rect.h))
+    def set_image(self, image_path: str):
+        try:
+            image = pygame.image.load(image_path)
+            w, h = self.image.get_size()
+            self.image = pygame.transform.smoothscale(image, (w, h))
+        except FileNotFoundError:
+            print(f"Failed to load image: {image_path}")
 
-    def is_pressed(self) -> bool:
-        action = False
-        if (
-            pygame.mouse.get_pressed()[0] == 1
-            and self.image.get_rect().collidepoint(pygame.mouse.get_pos())
-            and self.pressed == False
-        ):
-            self.pressed = True
-            action = True
-
-        if pygame.mouse.get_pressed()[0] == 0:
-            self.pressed = False
-
-        return action
+    def is_pressed(self, mouse_pos: tuple[int, int]) -> bool:
+        return pygame.Rect((self.x, self.y), self.image.get_size()).collidepoint(
+            mouse_pos
+        )
 
     def pos(self) -> tuple[float, float]:
-        rect = self.image.get_rect()
-        return (rect.x, rect.y)
+        return (self.x, self.y)
 
     def tag_pos(self) -> tuple[float, float]:
-        rect = self.image.get_rect()
-        return (rect.x + rect.w / 2, rect.h + rect.h / 3)
+        w, h = self.image.get_size()
+        return (self.x + w / 2, self.y + 4 * h / 3)
 
     def scale(self, factor: float):
-        r = self.image.get_rect()
-        self.image = pygame.transform.smoothscale(
-            self.image, (r.w * factor, r.h * factor)
-        )
+        w, h = self.image.get_size()
+        self.image = pygame.transform.smoothscale(self.image, (w * factor, h * factor))
