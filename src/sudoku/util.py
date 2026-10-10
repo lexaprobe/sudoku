@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
@@ -14,56 +15,59 @@ def image_path(tag: str) -> str:
     return str(Path(f"{IMAGES}/{tag}.png").resolve())
 
 
-def fetch_puzzle_data():
+def fetch_daily_puzzle(mode: str) -> dict[str, Any] | None:
+    if mode.lower() not in ["easy", "medium", "hard"]:
+        return None
+
     r = requests.get(NYT_SUDOKU_URL)
     if not r.ok:
         return None
-
     for script in BeautifulSoup(r.text, "html.parser").find_all("script"):
         if "window.gameData" in script.text:
             puzzle_data = json.loads(script.text.lstrip("window.gameData = "))
             break
 
-    return puzzle_data
+    if puzzle_data is None:
+        return None
+    puzzle = "".join(str(x) for x in puzzle_data[mode.lower()]["puzzle_data"]["puzzle"])
+    hints = puzzle_data[mode.lower()]["puzzle_data"]["hints"]
+    title = f"NYT {mode.capitalize()} Puzzle — {puzzle_data["displayDate"]}"
+    return {"puzzle": puzzle, "hints": hints, "title": title}
 
 
-def fetch_daily_puzzle(mode: str) -> str:
-    puzzle_data = fetch_puzzle_data()
-    if puzzle_data is None or mode.lower() not in ["easy", "medium", "hard"]:
-        return ""
-    return "".join(str(x) for x in puzzle_data[mode]["puzzle_data"]["puzzle"])
-
-
-def get_puzzle(args: list[str]) -> tuple[str, str]:
-    puzzle = ""
-    msg = ""
+def get_puzzle(args: list[str]) -> dict[str, Any]:
+    ret = {"puzzle": "", "title": "", "hints": [], "err": ""}
     if len(args) < 2:
-        msg = f"\nError: No parameters given\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
-        return (puzzle, msg)
-
+        ret["err"] = (
+            f"\nError: No parameters given\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+        )
+        return ret
     p = args[1]
     if p.isdigit():
         with open(Path(PUZZLES).resolve()) as f:
             puzzles = f.read().split("\n\n")
             seed = int(p) - 1
             if seed < 0 or seed > 49:
-                msg = (
+                ret["err"] = (
                     f"\nError: Invalid seed: '{p}'\nExpected a number between 1 and 50"
                 )
             else:
-                puzzle = puzzles[seed].replace("\n", "")
-                msg = f"Puzzle {p}"
+                ret["puzzle"] = puzzles[seed].replace("\n", "")
+                ret["title"] = f"Puzzle {p}"
     elif p.isalpha():
         mode = p.lower()
-        data = fetch_puzzle_data()
-        puzzle = fetch_daily_puzzle(mode)
-        if data is not None:
-            msg = f"NYT {mode.capitalize()} Puzzle — {data["displayDate"]}"
-        if puzzle == "":
-            msg = f"\nError: Invalid mode: '{p}'\nExpected one of: 'easy', 'medium', or 'hard'"
+        puzzle_data = fetch_daily_puzzle(mode)
+        if puzzle_data is None:
+            ret["err"] = f"\nError: Unable to retrieve puzzle data for mode '{mode}'"
+            return ret
+        ret["puzzle"] = puzzle_data["puzzle"]
+        ret["title"] = puzzle_data["title"]
+        ret["hints"] = puzzle_data["hints"]
     else:
-        msg = f"\nError: Invalid parameter: '{p}'\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
-    return (puzzle, msg)
+        ret["err"] = (
+            f"\nError: Invalid parameter: '{p}'\nExpected:\n\tmain.py <seed>\nOR\n\tmain.py <mode>"
+        )
+    return ret
 
 
 def get_time(frames: int, fps: int) -> tuple[int, int, int]:

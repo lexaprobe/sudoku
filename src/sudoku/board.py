@@ -88,16 +88,23 @@ class Cell:
 class Sudoku:
     title: str = ""
     _puzzle: str = ""
+    _hints: list[int]
     _cells: list[Cell]
     _current_cell: Cell | None = None
 
     def __init__(self):
         self._cells = [Cell(i) for i in range(81)]
 
-    def set_puzzle(self, puzzle: str, title="Sudoku Puzzle") -> bool:
+    def set_puzzle(
+        self, puzzle: str, hints: list[int] = [], title="Sudoku Puzzle"
+    ) -> bool:
         if len(puzzle) != 81:
             return False
         self._puzzle = puzzle
+        for h in hints:
+            if not h in range(81):
+                hints = []
+        self._hints = hints
         self.title = title
         for i in range(81):
             cell = self.get_cell(i)
@@ -117,6 +124,13 @@ class Sudoku:
         if not index in range(81):
             raise IndexError
         return self._cells[index]
+
+    def next_hint(self) -> int | None:
+        for h in self._hints:
+            cell = self.get_cell(h)
+            if cell.digit() == "0":
+                return h
+        return None
 
     def reset(self):
         for c in self._cells:

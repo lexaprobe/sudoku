@@ -14,14 +14,13 @@ def init(window_width: int = 1040, fps: int = 60):
     screen.set_caption("Sudoku")
 
     sudoku = Sudoku()
-    puzzle, msg = util.get_puzzle(sys.argv)
-    if puzzle == "":
-        print(msg, file=sys.stderr)
+    data = util.get_puzzle(sys.argv)
+    if data["err"] != "":
+        print(data["err"], file=sys.stderr)
         exit(1)
-    if not sudoku.set_puzzle(puzzle):
-        print("\nError: Invalid grid format", file=sys.stderr)
+    if not sudoku.set_puzzle(data["puzzle"], hints=data["hints"], title=data["title"]):
+        print("\nError: Invalid puzzle format", file=sys.stderr)
         exit(2)
-    sudoku.title = msg
 
     run_puzzle(app, PuzzleState(sudoku), screen)
 
@@ -32,7 +31,7 @@ def run_puzzle(app: AppState, puzzle: PuzzleState, screen: ScreenManager):
     frames = 0
     while True:
         digit = None
-        hint = False
+        cc = None
 
         event = app.update()
         if event == Event.QUIT:
@@ -51,14 +50,13 @@ def run_puzzle(app: AppState, puzzle: PuzzleState, screen: ScreenManager):
             elif action == Event.DELETE:
                 digit = "0"
             elif action == Event.HINT:
-                pass
+                cc = puzzle.sudoku.next_hint()
         elif event == Event.KEYDOWN:
             digit = app.get_key()
 
         puzzle.candidate_mode = True if app.shift_pressed() else False
         if not puzzle.paused:
-            cc = 0
-            if not hint:
+            if cc is None:
                 cc = find_cell(round(screen.width() / 13), app.mouse_pos())
             puzzle.sudoku.set_current_cell(cc)
             if not puzzle.solved:

@@ -159,8 +159,8 @@ class PuzzleScreen(Screen):
     def load_buttons(self, size: int):
         buttons = []
         buttons.append(Button(20, 10, size, size, ButtonTag.PAUSE))
-        buttons.append(Button(20 + 2 * size, 10, size, size, ButtonTag.HINT))
-        buttons.append(Button(20 + 4 * size, 10, size, size, ButtonTag.DELETE))
+        buttons.append(Button(20 + 2 * size, 10, size, size, ButtonTag.DELETE))
+        buttons.append(Button(20 + 4 * size, 10, size, size, ButtonTag.HINT))
         buttons.append(Button(20 + 20 * size, 10, size, size, ButtonTag.SAVE))
         buttons.append(Button(20 + 22 * size, 10, size, size, ButtonTag.LOAD))
         buttons.append(Button(20 + 24 * size, 10, size, size, ButtonTag.RESET))
@@ -206,6 +206,7 @@ class PuzzleScreen(Screen):
                 return Event.NONE
 
     def draw(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
+        # if puzzle has hints, add hint button here
         self.screen.fill(WHITE)
 
         self.screen.blit(self.draw_grid(puzzle, fm), self.grid.pos())
