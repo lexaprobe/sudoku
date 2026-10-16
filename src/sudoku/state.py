@@ -29,8 +29,8 @@ class Event(Enum):
     QUIT = 6
     MOUSEDOWN = 7
     KEYDOWN = 8
-    RESUME = 9
-    DELETE = 10
+    DELETE = 9
+    SWITCH_MODE = 10
 
 
 class AppState:

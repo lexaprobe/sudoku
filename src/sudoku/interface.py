@@ -10,7 +10,8 @@ class ButtonTag(Enum):
     SAVE = "Save"
     LOAD = "Load"
     HINT = "Hint"
-    SWITCH = "Switch Mode"
+    NORMAL = "Normal Mode"
+    CANDIDATE = "Candidate Mode"
     DELETE = "Delete"
 
 
@@ -27,25 +28,20 @@ class Button:
         self.image = pygame.Surface((w, h), pygame.SRCALPHA)
         self.tag = tag
 
-    def set_image(self, image_path: str):
-        try:
-            image = pygame.image.load(image_path)
-            w, h = self.image.get_size()
-            self.image = pygame.transform.smoothscale(image, (w, h))
-        except FileNotFoundError:
-            print(f"Failed to load image: {image_path}")
+    def set_image(self, image: pygame.Surface | None):
+        w, h = self.image.get_size()
+        if image is None:
+            image = pygame.Surface((w, h), pygame.SRCALPHA)
+        self.image = pygame.transform.smoothscale(image, (w, h))
+
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect((self.x, self.y), self.image.get_size())
 
     def is_pressed(self, mouse_pos: tuple[int, int]) -> bool:
-        return pygame.Rect((self.x, self.y), self.image.get_size()).collidepoint(
-            mouse_pos
-        )
+        return self.rect().collidepoint(mouse_pos)
 
     def pos(self) -> tuple[float, float]:
         return (self.x, self.y)
-
-    def tag_pos(self) -> tuple[float, float]:
-        w, h = self.image.get_size()
-        return (self.x + w / 2, self.y + 4 * h / 3)
 
     def scale(self, factor: float):
         w, h = self.image.get_size()

@@ -86,10 +86,10 @@ class Cell:
 
 
 class Sudoku:
+    _cells: list[Cell]
+    _hints: list[int]
     title: str = ""
     _puzzle: str = ""
-    _hints: list[int]
-    _cells: list[Cell]
     _current_cell: Cell | None = None
 
     def __init__(self):
@@ -98,14 +98,18 @@ class Sudoku:
     def set_puzzle(
         self, puzzle: str, hints: list[int] = [], title="Sudoku Puzzle"
     ) -> bool:
+        self.title = title
+        # Check puzzle validity
         if len(puzzle) != 81:
             return False
         self._puzzle = puzzle
+        bad_hints = []
+        # Check hints validity
         for h in hints:
             if not h in range(81):
-                hints = []
-        self._hints = hints
-        self.title = title
+                bad_hints.append(h)
+        self._hints = list(set(hints) - set(bad_hints))
+        # Configure puzzle cells
         for i in range(81):
             cell = self.get_cell(i)
             cell.insert_digit(puzzle[i])
@@ -125,12 +129,22 @@ class Sudoku:
             raise IndexError
         return self._cells[index]
 
+    def get_hints(self) -> list[int] | None:
+        return None if self._hints == [] else self._hints
+
     def next_hint(self) -> int | None:
         for h in self._hints:
             cell = self.get_cell(h)
             if cell.digit() == "0":
                 return h
         return None
+
+    def count(self, digit: int) -> int:
+        count = 0
+        for c in self._cells:
+            if int(c.digit()) == digit:
+                count += 1
+        return count
 
     def reset(self):
         for c in self._cells:

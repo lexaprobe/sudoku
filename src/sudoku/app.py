@@ -38,7 +38,7 @@ def run_puzzle(app: AppState, puzzle: PuzzleState, screen: ScreenManager):
             return
         elif event == Event.MOUSEDOWN:
             action = screen.query(app.mouse_pos())
-            if action in [Event.PAUSE, Event.RESUME]:
+            if action == Event.PAUSE:
                 puzzle.paused = not puzzle.paused
             elif action == Event.RESET:
                 puzzle.reset()
@@ -51,10 +51,12 @@ def run_puzzle(app: AppState, puzzle: PuzzleState, screen: ScreenManager):
                 digit = "0"
             elif action == Event.HINT:
                 cc = puzzle.sudoku.next_hint()
+            elif action == Event.SWITCH_MODE:
+                puzzle.candidate_mode = not puzzle.candidate_mode
         elif event == Event.KEYDOWN:
             digit = app.get_key()
 
-        puzzle.candidate_mode = True if app.shift_pressed() else False
+        # puzzle.candidate_mode = True if app.shift_pressed() else False
         if not puzzle.paused:
             if cc is None:
                 cc = find_cell(round(screen.width() / 13), app.mouse_pos())

@@ -83,6 +83,7 @@ class Screen(ABC):
     screen: pygame.Surface
     tag: ScreenTag
     buttons: dict[ButtonTag, Button] = {}
+    hidden_buttons: dict[ButtonTag, Button] = {}
 
     def __init__(self, size: tuple[int, int], tag: ScreenTag):
         self.screen = pygame.Surface(size)
@@ -139,6 +140,7 @@ class PuzzleScreen(Screen):
     grid: Pane
     sidebar: Pane
     popup: Pane
+    images: dict[ButtonTag, pygame.Surface | None] = {}
 
     def __init__(self, size: tuple[int, int]):
         super().__init__(size, ScreenTag.PUZZLE)
@@ -154,20 +156,24 @@ class PuzzleScreen(Screen):
         backer = pygame.Rect((0, 0), (6 * bw, 4 * bw))
         backer.center = (round(w / 2), round(bw + (bw * 9 / 2)))
         self.popup = Pane.from_rect(backer)
-        self.load_buttons(round(bw / 2))
+        self.load_buttons(bw - 20)
 
     def load_buttons(self, size: int):
+        for tag in ButtonTag:
+            self.images[tag] = load_image(image_path(tag.value))
         buttons = []
-        buttons.append(Button(20, 10, size, size, ButtonTag.PAUSE))
-        buttons.append(Button(20 + 2 * size, 10, size, size, ButtonTag.DELETE))
-        buttons.append(Button(20 + 4 * size, 10, size, size, ButtonTag.HINT))
-        buttons.append(Button(20 + 20 * size, 10, size, size, ButtonTag.SAVE))
-        buttons.append(Button(20 + 22 * size, 10, size, size, ButtonTag.LOAD))
-        buttons.append(Button(20 + 24 * size, 10, size, size, ButtonTag.RESET))
-
+        buf = 10
+        xo = size - 2 * buf
+        buttons.append(Button(buf, buf, size, size, ButtonTag.PAUSE))
+        buttons.append(Button(buf + 2 * xo, buf, size, size, ButtonTag.DELETE))
+        buttons.append(Button(buf + 4 * xo, buf, size, size, ButtonTag.HINT))
+        buttons.append(Button(buf + 20 * xo, buf, size, size, ButtonTag.SAVE))
+        buttons.append(Button(buf + 22 * xo, buf, size, size, ButtonTag.LOAD))
+        buttons.append(Button(buf + 24 * xo, buf, size, size, ButtonTag.RESET))
+        buttons.append(Button(19 * xo, buf + 6 * xo, 4 * size, size, ButtonTag.NORMAL))
         for b in buttons:
-            b.set_image(image_path(b.tag.value))
             self.buttons[b.tag] = b
+            b.set_image(self.images[b.tag])
 
     def query(self, mouse_pos: tuple[int, int]) -> Event:
         for _, b in self.buttons.items():
@@ -181,17 +187,17 @@ class PuzzleScreen(Screen):
             return Event.NONE
         match b.tag:
             case ButtonTag.PAUSE:
-                self.buttons.pop(b.tag)
-                b.tag = ButtonTag.RESUME
-                b.set_image(image_path(b.tag.value))
-                self.buttons[b.tag] = b
+                self.swap_tag(b, ButtonTag.RESUME)
                 return Event.PAUSE
             case ButtonTag.RESUME:
-                self.buttons.pop(b.tag)
-                b.tag = ButtonTag.PAUSE
-                b.set_image(image_path(b.tag.value))
-                self.buttons[b.tag] = b
-                return Event.RESUME
+                self.swap_tag(b, ButtonTag.PAUSE)
+                return Event.PAUSE
+            case ButtonTag.NORMAL:
+                self.swap_tag(b, ButtonTag.CANDIDATE)
+                return Event.SWITCH_MODE
+            case ButtonTag.CANDIDATE:
+                self.swap_tag(b, ButtonTag.NORMAL)
+                return Event.SWITCH_MODE
             case ButtonTag.RESET:
                 return Event.RESET
             case ButtonTag.SAVE:
@@ -206,27 +212,19 @@ class PuzzleScreen(Screen):
                 return Event.NONE
 
     def draw(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
-        # if puzzle has hints, add hint button here
+        if puzzle.sudoku.get_hints() is None:
+            self.buttons.pop(ButtonTag.HINT)
         self.screen.fill(WHITE)
-
         self.screen.blit(self.draw_grid(puzzle, fm), self.grid.pos())
         self.screen.blit(self.draw_header(puzzle, fm), self.header.pos())
         self.screen.blit(self.draw_sidebar(puzzle, fm), self.sidebar.pos())
-
-        font_xs = fm.load_font(self.scale(FONT_XS))
-        for _, b in self.buttons.items():
-            self.screen.blit(b.image.convert_alpha(), b.pos())
-            text = font_xs.render(b.tag.value, 1, BLACK)
-            self.screen.blit(
-                text,
-                text.get_rect(center=b.tag_pos()),
-            )
-
+        for tag, b in self.buttons.items():
+            backing = True if tag in [ButtonTag.NORMAL, ButtonTag.CANDIDATE] else False
+            self.draw_button(b, backing)
         if puzzle.paused:
             self.overlay.surface.fill((255, 255, 255, 128))
             self.screen.blit(self.overlay.surface, self.overlay.pos())
             self.screen.blit(self.draw_popup(fm), self.popup.pos())
-
         return self.screen
 
     def draw_grid(self, puzzle: PuzzleState, fm: FontManager) -> pygame.Surface:
@@ -335,7 +333,10 @@ class PuzzleScreen(Screen):
                 r = pygame.draw.rect(
                     self.sidebar.surface, WHITE, pygame.Rect((x, y), (div, div))
                 )
-                text = font.render(str(i), 1, BLACK)
+                colour = BLACK
+                if puzzle.sudoku.count(i) >= 9:
+                    colour = GREY
+                text = font.render(str(i), 1, colour)
                 self.sidebar.surface.blit(text, text.get_rect(center=r.center))
                 i += 1
 
@@ -347,6 +348,12 @@ class PuzzleScreen(Screen):
         self.sidebar.outline(width=self.scale(4))
         return self.sidebar.surface
 
+    def draw_button(self, button: Button, backing: bool = False) -> pygame.Surface:
+        if backing:
+            pygame.draw.rect(self.screen, WHITE, button.rect())
+        self.screen.blit(button.image.convert_alpha(), button.pos())
+        return self.screen
+
     def draw_popup(self, fm: FontManager) -> pygame.Surface:
         font_l = fm.load_font(self.scale(FONT_L))
         rect = self.popup.surface.get_rect()
@@ -354,6 +361,12 @@ class PuzzleScreen(Screen):
         display = font_l.render("Game Paused", 1, BLACK)
         self.popup.surface.blit(display, display.get_rect(center=rect.center))
         return self.popup.surface
+
+    def swap_tag(self, b: Button, tag: ButtonTag):
+        self.buttons.pop(b.tag)
+        b.tag = tag
+        b.set_image(self.images[tag])
+        self.buttons[tag] = b
 
 
 class ScreenManager:
@@ -420,6 +433,14 @@ class ScreenManager:
             return self._current.query(mouse_pos)
         else:
             return Event.NONE
+
+
+def load_image(image_path: str) -> pygame.Surface | None:
+    try:
+        return pygame.image.load(image_path)
+    except FileNotFoundError:
+        print(f"Failed to load image: {image_path}")
+        return None
 
 
 def get_cell_colour(cell: Cell, sudoku: Sudoku) -> pygame.Color:
